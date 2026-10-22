@@ -14,12 +14,13 @@ htmlcov/
 .vscode/
 .idea/
 
-# Data (downloaded with `make data`)
+# Data (downloaded with `make data`) and local-only files
 data/raw/
 data/cache/
+data/legacy/
+data/manual_samples/
 
 # Model files live in the MLflow registry, not in git
-models/
 *.keras
 *.h5
 *.onnx
@@ -31,6 +32,3 @@ mlruns/
 
 # Run bundles copied from Google Drive
 runs/
-
-# Runtime uploads
-app/static/uploads/
