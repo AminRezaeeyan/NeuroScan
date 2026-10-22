@@ -9,6 +9,8 @@ from neuroscan.data.datasets import load_split
 from neuroscan.evaluate import (
     bootstrap_ci,
     evaluate,
+    group_level_metrics,
+    group_weights,
     point_metrics,
     select_eval_set,
     tumor_rates,
@@ -47,6 +49,35 @@ def test_bootstrap_interval_contains_point_estimate():
     assert ci["accuracy_ci_high"] - ci["accuracy_ci_low"] < 0.1
 
 
+def test_each_group_counts_once():
+    # A group of 3 near-duplicates, all right, and one single image, wrong.
+    y_true = np.array([G, G, G, M])
+    y_pred = np.array([G, G, G, G])
+    groups = np.array([7, 7, 7, 9])
+    np.testing.assert_allclose(group_weights(groups), [1 / 3, 1 / 3, 1 / 3, 1])
+    assert point_metrics(y_true, y_pred)["accuracy"] == pytest.approx(0.75)
+    assert point_metrics(y_true, y_pred, group_weights(groups))["accuracy"] == pytest.approx(0.5)
+
+    preds = pd.DataFrame({"label_idx": y_true, "pred_idx": y_pred, "group": groups})
+    m = group_level_metrics(preds)
+    assert m["grouped.n_groups"] == 2
+    assert m["grouped.accuracy"] == pytest.approx(0.5)
+
+
+def test_cluster_bootstrap_is_wider_when_duplicates_repeat_outcomes():
+    rng = np.random.default_rng(1)
+    n_groups, size = 60, 8
+    groups = np.repeat(np.arange(n_groups), size)
+    y_true = np.repeat(rng.integers(0, 4, n_groups), size)
+    right = np.repeat(rng.random(n_groups) < 0.8, size)  # whole groups right or wrong
+    y_pred = np.where(right, y_true, (y_true + 1) % 4)
+    image_ci = bootstrap_ci(y_true, y_pred, n=300)
+    group_ci = bootstrap_ci(y_true, y_pred, groups, n=300)
+    image_width = image_ci["accuracy_ci_high"] - image_ci["accuracy_ci_low"]
+    group_width = group_ci["accuracy_ci_high"] - group_ci["accuracy_ci_low"]
+    assert group_width > 1.8 * image_width
+
+
 def test_eval_sets():
     split = pd.DataFrame(
         {
@@ -81,6 +112,7 @@ def test_evaluate_end_to_end(raw_dir, split_csv, tiny_config_file, tmp_path):
         "probe_accuracy",
         "latency_cpu_p50_ms",
     } <= m.keys()
+    assert {"grouped.accuracy", "grouped.n_groups", "grouped.macro_f1_ci_high"} <= m.keys()
     assert set(report.figures) == {"confusion_matrix.png", "misclassified.png"}
     assert list(report.predictions.columns[-4:]) == [f"p_{c}" for c in CLASS_NAMES]
     np.testing.assert_allclose(report.predictions.filter(like="p_").sum(axis=1), 1, rtol=1e-5)

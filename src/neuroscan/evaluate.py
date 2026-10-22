@@ -9,8 +9,9 @@ Evaluation sets come from the split file:
 * ``kaggle-testing``: the Kaggle Testing folder (the original benchmark protocol);
 * ``kaggle-testing-clean``: Kaggle Testing images with no duplicate in Kaggle Training.
 
-Metrics are logged as ``<eval-set>.<name>``; figures and predictions go under
-``evaluation/<eval-set>/``.
+Metrics are logged as ``<eval-set>.<name>``; ``<eval-set>.grouped.<name>`` counts each
+duplicate group once (1 / group-size weights, cluster-bootstrap intervals). Figures and
+predictions go under ``evaluation/<eval-set>/``.
 """
 
 from __future__ import annotations
@@ -61,23 +62,36 @@ def select_eval_set(split: pd.DataFrame, eval_set: str) -> pd.DataFrame:
     raise ValueError(f"Unknown eval set {eval_set!r}; choose from {EVAL_SETS}")
 
 
-def tumor_rates(y_true: np.ndarray, y_pred: np.ndarray) -> tuple[float, float]:
+def group_weights(groups: np.ndarray) -> np.ndarray:
+    """1 / group size, so every duplicate group counts once in total."""
+    _, inverse, counts = np.unique(groups, return_inverse=True, return_counts=True)
+    return 1.0 / counts[inverse]
+
+
+def tumor_rates(
+    y_true: np.ndarray, y_pred: np.ndarray, weights: np.ndarray | None = None
+) -> tuple[float, float]:
     """(sensitivity, specificity) for tumor (any of the 3 tumor classes) vs. no tumor."""
+    w = np.ones(len(y_true)) if weights is None else weights
     true_tumor = y_true != NO_TUMOR_INDEX
     pred_tumor = y_pred != NO_TUMOR_INDEX
-    sensitivity = float(pred_tumor[true_tumor].mean()) if true_tumor.any() else float("nan")
-    specificity = float((~pred_tumor)[~true_tumor].mean()) if (~true_tumor).any() else float("nan")
-    return sensitivity, specificity
+    sens = w[true_tumor & pred_tumor].sum() / w[true_tumor].sum() if true_tumor.any() else np.nan
+    spec = (
+        w[~true_tumor & ~pred_tumor].sum() / w[~true_tumor].sum() if (~true_tumor).any() else np.nan
+    )
+    return float(sens), float(spec)
 
 
-def point_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict[str, float]:
+def point_metrics(
+    y_true: np.ndarray, y_pred: np.ndarray, weights: np.ndarray | None = None
+) -> dict[str, float]:
     labels = list(range(len(CLASS_NAMES)))
     precision, recall, f1, _ = precision_recall_fscore_support(
-        y_true, y_pred, labels=labels, zero_division=0
+        y_true, y_pred, labels=labels, sample_weight=weights, zero_division=0
     )
-    sensitivity, specificity = tumor_rates(y_true, y_pred)
+    sensitivity, specificity = tumor_rates(y_true, y_pred, weights)
     metrics = {
-        "accuracy": float(accuracy_score(y_true, y_pred)),
+        "accuracy": float(accuracy_score(y_true, y_pred, sample_weight=weights)),
         "macro_precision": float(precision.mean()),
         "macro_recall": float(recall.mean()),
         "macro_f1": float(f1.mean()),
@@ -92,24 +106,68 @@ def point_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict[str, float]:
 
 
 def bootstrap_ci(
-    y_true: np.ndarray, y_pred: np.ndarray, n: int = BOOTSTRAP_SAMPLES, seed: int = 0
+    y_true: np.ndarray,
+    y_pred: np.ndarray,
+    groups: np.ndarray | None = None,
+    n: int = BOOTSTRAP_SAMPLES,
+    seed: int = 0,
 ) -> dict[str, float]:
-    """95% percentile intervals for accuracy, macro F1 and tumor sensitivity."""
+    """95% percentile intervals for accuracy, macro F1 and tumor sensitivity.
+
+    Without ``groups``, images are resampled. With ``groups``, whole groups are
+    resampled and each group counts once (cluster bootstrap), matching
+    ``point_metrics(..., group_weights(groups))``.
+    """
     rng = np.random.default_rng(seed)
+    if groups is not None:
+        _, inverse = np.unique(groups, return_inverse=True)
+        members = [np.flatnonzero(inverse == g) for g in range(inverse.max() + 1)]
     samples: dict[str, list[float]] = {"accuracy": [], "macro_f1": [], "tumor_sensitivity": []}
     for _ in range(n):
-        idx = rng.integers(0, len(y_true), len(y_true))
+        if groups is None:
+            idx = rng.integers(0, len(y_true), len(y_true))
+            w = None
+        else:
+            picked = rng.integers(0, len(members), len(members))
+            idx = np.concatenate([members[g] for g in picked])
+            w = np.concatenate([np.full(len(members[g]), 1 / len(members[g])) for g in picked])
         t, p = y_true[idx], y_pred[idx]
-        samples["accuracy"].append(float((t == p).mean()))
+        samples["accuracy"].append(float(accuracy_score(t, p, sample_weight=w)))
         samples["macro_f1"].append(
-            float(f1_score(t, p, average="macro", labels=range(len(CLASS_NAMES)), zero_division=0))
+            float(
+                f1_score(
+                    t,
+                    p,
+                    average="macro",
+                    labels=range(len(CLASS_NAMES)),
+                    sample_weight=w,
+                    zero_division=0,
+                )
+            )
         )
-        samples["tumor_sensitivity"].append(tumor_rates(t, p)[0])
+        samples["tumor_sensitivity"].append(tumor_rates(t, p, w)[0])
     out = {}
     for key, values in samples.items():
         low, high = np.nanpercentile(values, [2.5, 97.5])
         out[f"{key}_ci_low"], out[f"{key}_ci_high"] = float(low), float(high)
     return out
+
+
+def group_level_metrics(preds: pd.DataFrame) -> dict[str, float]:
+    """Metrics where every duplicate group counts once, prefixed ``grouped.``.
+
+    Image-level intervals treat near-duplicates as independent evidence and come out
+    too narrow; these use 1 / group-size weights and a cluster bootstrap.
+    """
+    y_true, y_pred = preds["label_idx"].to_numpy(), preds["pred_idx"].to_numpy()
+    groups = preds["group"].to_numpy()
+    weighted = point_metrics(y_true, y_pred, group_weights(groups))
+    keep = ["accuracy", "macro_f1", "tumor_sensitivity", "tumor_specificity"]
+    keep += [f"{name}.recall" for name in CLASS_NAMES]
+    out = {"n_groups": float(len(np.unique(groups)))}
+    out.update({k: weighted[k] for k in keep})
+    out.update(bootstrap_ci(y_true, y_pred, groups))
+    return {f"grouped.{k}": v for k, v in out.items()}
 
 
 def shortcut_check(
@@ -177,7 +235,7 @@ def evaluate(
     cfg.data.image_size = model.input_shape[1]
     cfg.data.batch_size = batch_size
     probs = model.predict(make_dataset(df, raw_dir, cfg, training=False), verbose=0)
-    preds = df[["path", "label", "label_idx", "kaggle_split", "split"]].assign(
+    preds = df[["path", "label", "label_idx", "group", "kaggle_split", "split"]].assign(
         pred_idx=probs.argmax(axis=1),
         confidence=probs.max(axis=1),
     )
@@ -188,6 +246,7 @@ def evaluate(
     y_true, y_pred = preds["label_idx"].to_numpy(), preds["pred_idx"].to_numpy()
     metrics = {"n_images": float(len(df)), **point_metrics(y_true, y_pred)}
     metrics.update(bootstrap_ci(y_true, y_pred))
+    metrics.update(group_level_metrics(preds))
     if with_shortcut:
         metrics.update(shortcut_check(split, preds, raw_dir, metadata_cache))
     if with_latency:
@@ -227,6 +286,11 @@ def print_report(report: EvalReport) -> None:
             f"  {key:20s} {m[key]:.4f}  (95% CI {m[f'{key}_ci_low']:.4f}-{m[f'{key}_ci_high']:.4f})"
         )
     print(f"  {'tumor_specificity':20s} {m['tumor_specificity']:.4f}")
+    if "grouped.n_groups" in m:
+        print(f"  each duplicate group counted once ({int(m['grouped.n_groups'])} groups):")
+        for key in ("accuracy", "macro_f1", "tumor_sensitivity"):
+            low, high = m[f"grouped.{key}_ci_low"], m[f"grouped.{key}_ci_high"]
+            print(f"    {key:18s} {m[f'grouped.{key}']:.4f}  (95% CI {low:.4f}-{high:.4f})")
     for name in CLASS_NAMES:
         p, r, f = (m[f"{name}.{k}"] for k in ("precision", "recall", "f1"))
         print(f"  {name:12s} P={p:.3f} R={r:.3f} F1={f:.3f}")
