@@ -1,9 +1,23 @@
 # Baseline CNN with GlobalAveragePooling -> Dense(128) instead of Flatten -> Dense(512).
+# Everything else matches baseline_cnn.yaml, so only the head differs.
 run_name: cnn-gap
 model:
   name: cnn_gap
   dense_units: 128
   dropout: 0.5
+data:
+  image_size: 224
+  batch_size: 32
+  seed: 42
+augment:
+  flip: true
+  rotation: 0.1
+  zoom: 0.1
+  brightness: 0.15
 train:
   epochs: 60
   learning_rate: 0.001
+  early_stopping_patience: 10
+  lr_patience: 7
+  lr_factor: 0.5
+  min_lr: 0.00001

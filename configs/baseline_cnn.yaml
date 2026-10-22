@@ -1,9 +1,23 @@
 # Baseline CNN: 4 conv blocks, Flatten -> Dense(512).
+# Hyperparameters are identical to the first published version of this model.
 run_name: baseline-cnn
 model:
   name: baseline_cnn
   dense_units: 512
   dropout: 0.5
+data:
+  image_size: 224
+  batch_size: 32
+  seed: 42
+augment:
+  flip: true
+  rotation: 0.1
+  zoom: 0.1
+  brightness: 0.15
 train:
   epochs: 60
-  learning_rate: 0.001
+  learning_rate: 0.001         # Adam default
+  early_stopping_patience: 10  # best weights restored
+  lr_patience: 7               # ReduceLROnPlateau
+  lr_factor: 0.5
+  min_lr: 0.00001
