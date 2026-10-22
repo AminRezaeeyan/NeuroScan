@@ -1,4 +1,4 @@
-.PHONY: install lint typecheck test mlflow data dedup split import eval colab-package
+.PHONY: install lint typecheck test mlflow data dedup split import eval select colab-package
 
 install:
 	uv sync --all-extras
@@ -36,6 +36,10 @@ import:
 SETS ?= test
 eval:
 	uv run python -m neuroscan.evaluate --run-id $(RUN) --eval-set $(SETS)
+
+# Compare evaluated models and apply docs/model_selection.md: make select [APPLY=1]
+select:
+	uv run python -m neuroscan.tracking.select $(if $(APPLY),--apply,)
 
 # Source archive of the current commit for Colab (upload it to Drive: MyDrive/neuroscan/code/)
 COMMIT := $(shell git rev-parse HEAD)
