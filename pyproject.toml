@@ -42,6 +42,9 @@ dev = [
     "bandit>=1.8",
     "types-PyYAML",
     "pandas-stubs",
+    "ipykernel>=7.3.0",
+    "nbconvert>=7.17.2",
+    "nbformat>=5.11.1",
 ]
 
 [build-system]
