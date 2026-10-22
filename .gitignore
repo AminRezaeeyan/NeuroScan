@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE
+.vscode/
+.idea/
+
+# Data (downloaded with `make data`)
+data/raw/
+data/cache/
+
+# Model files live in the MLflow registry, not in git
+models/
+*.keras
+*.h5
+*.onnx
+
+# MLflow (local tracking server)
+mlflow.db
+mlartifacts/
+mlruns/
+
+# Run bundles copied from Google Drive
+runs/
+
+# Runtime uploads
+app/static/uploads/
