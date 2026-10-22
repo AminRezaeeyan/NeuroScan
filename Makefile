@@ -1,4 +1,4 @@
-.PHONY: install lint typecheck test mlflow data import colab-package
+.PHONY: install lint typecheck test mlflow data dedup split import colab-package
 
 install:
 	uv sync --all-extras
@@ -19,6 +19,14 @@ mlflow:
 
 data:
 	uv run python -m neuroscan.data.download --out data/raw
+
+# Duplicate audit: data/duplicates.csv, data/duplicate_pairs.csv and the README figure
+dedup:
+	uv run python -m neuroscan.data.dedup --figure docs/figures/duplicate_pairs.png
+
+# Fixed, duplicate-aware train/val/test split (versioned in git)
+split:
+	uv run python -m neuroscan.data.splits --out splits/v1.csv
 
 # Import run bundle(s) into the local MLflow store: make import BUNDLE=runs/baseline-cnn
 import:
