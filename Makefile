@@ -1,4 +1,4 @@
-.PHONY: install lint typecheck test mlflow
+.PHONY: install lint typecheck test mlflow data
 
 install:
 	uv sync --all-extras
@@ -16,3 +16,6 @@ test:
 
 mlflow:
 	uv run mlflow ui --backend-store-uri sqlite:///mlflow.db --default-artifact-root ./mlartifacts
+
+data:
+	uv run python -m neuroscan.data.download --out data/raw
