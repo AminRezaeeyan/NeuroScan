@@ -30,8 +30,8 @@ def compile_model(model: keras.Model, learning_rate: float) -> keras.Model:
     return model
 
 
-def set_backbone_trainable(model: keras.Model, fine_tune_layers: int) -> None:
-    """Unfreeze the top ``fine_tune_layers`` of the backbone (0 = all of it).
+def set_backbone_trainable(model: keras.Model, fine_tune_from: str) -> None:
+    """Unfreeze the backbone from the first layer named ``fine_tune_from*`` ("" = all of it).
 
     BatchNorm layers stay frozen: updating their statistics with small batches
     hurts fine-tuning (standard Keras transfer-learning advice).
@@ -39,7 +39,12 @@ def set_backbone_trainable(model: keras.Model, fine_tune_layers: int) -> None:
     backbone = model.get_layer(BACKBONE_LAYER)
     backbone.trainable = True
     layers = backbone.layers
-    cutoff = len(layers) - fine_tune_layers if fine_tune_layers else 0
+    cutoff = 0
+    if fine_tune_from:
+        matches = [i for i, layer in enumerate(layers) if layer.name.startswith(fine_tune_from)]
+        if not matches:
+            raise ValueError(f"No backbone layer starts with {fine_tune_from!r}")
+        cutoff = matches[0]
     for i, layer in enumerate(layers):
         is_bn = isinstance(layer, keras.layers.BatchNormalization)
         layer.trainable = i >= cutoff and not is_bn

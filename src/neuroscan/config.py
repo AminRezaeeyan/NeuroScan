@@ -37,8 +37,9 @@ class ModelConfig:
     dense_units: int = 512
     # Transfer models only: "imagenet" or None (random init, used in tests).
     weights: str | None = "imagenet"
-    # Transfer models only: backbone layers unfrozen in stage 2 (0 = whole backbone).
-    fine_tune_layers: int = 0
+    # Transfer models only: stage 2 unfreezes the backbone from the first layer whose name
+    # starts with this prefix, e.g. "block6a" (EfficientNet) or "conv5" (ResNet). "" = all.
+    fine_tune_from: str = ""
 
 
 @dataclass

@@ -1,5 +1,6 @@
 """Model-builder smoke tests: build only, no training."""
 
+import keras
 import numpy as np
 import pytest
 
@@ -50,9 +51,14 @@ def test_transfer_models_start_frozen_and_unfreeze_top(name):
     backbone = model.get_layer(BACKBONE_LAYER)
     assert not backbone.trainable
 
-    set_backbone_trainable(model, cfg.model.fine_tune_layers)
+    set_backbone_trainable(model, cfg.model.fine_tune_from)
     trainable = [layer for layer in backbone.layers if layer.trainable]
-    assert 0 < len(trainable) <= cfg.model.fine_tune_layers
+    assert trainable
+    assert all(layer.name.startswith(("block6", "block7", "top", "conv5")) for layer in trainable)
+    assert not any(isinstance(layer, keras.layers.BatchNormalization) for layer in trainable)
+
+    with pytest.raises(ValueError, match="No backbone layer"):
+        set_backbone_trainable(model, "no_such_block")
 
 
 def test_unknown_model_name():

@@ -4,7 +4,7 @@ model:
   name: efficientnet_b0
   weights: imagenet
   dropout: 0.3
-  fine_tune_layers: 60   # roughly blocks 6-7 and the top conv
+  fine_tune_from: block6a   # stage 2 trains blocks 6-7, top conv and head (~3.1M of 4.1M params)
 train:
   epochs: 40
   head_epochs: 10
