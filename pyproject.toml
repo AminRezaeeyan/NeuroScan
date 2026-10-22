@@ -72,6 +72,10 @@ check_untyped_defs = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore:`shuffle=True` was passed:UserWarning",
+]
 markers = [
     "slow: builds full-size models or touches the network",
     "behavioral: runs against the registered champion model",

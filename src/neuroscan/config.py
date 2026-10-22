@@ -54,8 +54,8 @@ class TrainConfig:
     head_epochs: int = 0
     # Stage 2 learning rate = learning_rate * fine_tune_lr_scale.
     fine_tune_lr_scale: float = 0.1
-    # Debug/dry runs: cap the number of training images (0 = all).
-    max_train_images: int = 0
+    # Dry runs: cap the number of train and validation images each (0 = all).
+    max_images: int = 0
 
 
 @dataclass

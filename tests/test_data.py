@@ -47,17 +47,6 @@ def test_non_image_bytes_raise():
         preprocess_bytes(b"definitely not an image")
 
 
-@pytest.fixture
-def raw_dir(tmp_path):
-    for split in ("Training", "Testing"):
-        for i, name in enumerate(CLASS_NAMES):
-            folder = tmp_path / split / name
-            folder.mkdir(parents=True)
-            for j in range(2):
-                Image.new("L", (50, 60), color=i * 40 + j).save(folder / f"{j}.jpg")
-    return tmp_path
-
-
 def test_scan_raw(raw_dir):
     df = scan_raw(raw_dir)
     assert len(df) == 16
