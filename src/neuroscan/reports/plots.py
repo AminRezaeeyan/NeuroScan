@@ -6,6 +6,8 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 import matplotlib
+import numpy as np
+import pandas as pd
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
@@ -58,5 +60,43 @@ def duplicate_examples(pairs: list[tuple[str, str, str]], raw_dir: Path, title: 
         )
     if title:
         fig.suptitle(title)
+    fig.tight_layout()
+    return fig
+
+
+def confusion_matrix_figure(cm: np.ndarray, labels: Sequence[str], title: str = "") -> Figure:
+    """Counts with row-normalized recall in brackets."""
+    fig, ax = plt.subplots(figsize=(5.2, 4.6))
+    norm = cm / np.maximum(cm.sum(axis=1, keepdims=True), 1)
+    ax.imshow(norm, cmap="Blues", vmin=0, vmax=1)
+    for i in range(cm.shape[0]):
+        for j in range(cm.shape[1]):
+            color = "white" if norm[i, j] > 0.6 else "black"
+            ax.text(j, i, f"{cm[i, j]}\n({norm[i, j]:.0%})", ha="center", va="center", color=color)
+    ax.set_xticks(range(len(labels)), labels, rotation=20)
+    ax.set_yticks(range(len(labels)), labels)
+    ax.set_xlabel("predicted")
+    ax.set_ylabel("true")
+    ax.set_title(f"Confusion matrix {title}".strip())
+    fig.tight_layout()
+    return fig
+
+
+def misclassified_grid(errors: pd.DataFrame, raw_dir: Path, max_images: int = 16) -> Figure:
+    """Misclassified images with true label, prediction and confidence."""
+    shown = errors.sort_values("confidence", ascending=False).head(max_images)
+    cols = 4
+    rows = max(1, int(np.ceil(len(shown) / cols)))
+    fig, axes = plt.subplots(rows, cols, figsize=(3 * cols, 3.2 * rows), squeeze=False)
+    for ax in axes.flat:
+        ax.axis("off")
+    for ax, (_, row) in zip(axes.flat, shown.iterrows(), strict=False):
+        with Image.open(raw_dir / row["path"]) as img:
+            ax.imshow(img.convert("L"), cmap="gray")
+        ax.set_title(
+            f"true {row['label']}\npred {row['pred']} ({row['confidence']:.0%})", fontsize=9
+        )
+    title = "Most confident mistakes" if len(shown) else "No misclassified images"
+    fig.suptitle(title)
     fig.tight_layout()
     return fig
