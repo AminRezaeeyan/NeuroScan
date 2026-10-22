@@ -35,6 +35,7 @@ def test_import_creates_complete_run(run_dir, store):
     assert client.get_experiment(run.info.experiment_id).name == EXPERIMENT
     assert run.data.params["model.name"] == "cnn_gap"
     assert run.data.params["train.epochs"] == "2"
+    assert int(run.data.params["result.params"]) > 0
     assert run.data.tags["model"] == "cnn_gap"
     assert run.data.tags["trained_on"] == "cpu"
     assert len(run.data.tags["split_version"]) == 12

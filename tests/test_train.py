@@ -26,6 +26,7 @@ def test_train_writes_complete_bundle(raw_dir, split_csv, tiny_config_file, tmp_
     assert meta["end_ms"] >= meta["start_ms"]
     assert meta["epochs_trained"] == 2
     assert meta["num_train"] == 8 and meta["num_val"] == 4
+    assert meta["params"] == keras.models.load_model(run_dir / bundle.MODEL_FILE).count_params()
 
     history = json.loads((run_dir / bundle.HISTORY_FILE).read_text())
     assert len(history[MONITOR]) == 2

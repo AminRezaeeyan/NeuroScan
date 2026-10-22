@@ -112,7 +112,7 @@ def import_bundle(
         params = {k: "None" if v is None else v for k, v in flatten(config).items()}
         for key, value in params.items():
             client.log_param(rid, key, value)
-        for key in ("epochs_trained", "best_epoch", "best_stage", "num_train", "num_val"):
+        for key in ("epochs_trained", "best_epoch", "best_stage", "num_train", "num_val", "params"):
             if key in meta:
                 client.log_param(rid, f"result.{key}", meta[key])
 

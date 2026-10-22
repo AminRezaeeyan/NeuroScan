@@ -162,8 +162,8 @@ def train(cfg: Config, raw_dir: Path, split_csv: Path, out: Path, overwrite: boo
     split = load_split(split_csv)
     train_df = cap_per_class(split[split["split"] == "train"], cfg.train.max_images, cfg.data.seed)
     val_df = cap_per_class(split[split["split"] == "val"], cfg.train.max_images, cfg.data.seed)
-    train_ds = make_dataset(train_df, raw_dir, cfg, training=True)
-    val_ds = make_dataset(val_df, raw_dir, cfg, training=False)
+    train_ds = make_dataset(train_df, raw_dir, cfg, training=True, cache=True)
+    val_ds = make_dataset(val_df, raw_dir, cfg, training=False, cache=True)
     y_val = val_df["label_idx"].to_numpy()
     print(f"Train images: {len(train_df)}, validation images: {len(val_df)}")
 
@@ -225,6 +225,7 @@ def train(cfg: Config, raw_dir: Path, split_csv: Path, out: Path, overwrite: boo
         best_val_macro_f1=best_f1,
         num_train=len(train_df),
         num_val=len(val_df),
+        params=model.count_params(),
     )
     bundle.write_json(meta_path, meta)
     shutil.rmtree(run_dir / bundle.CHECKPOINT_DIR)

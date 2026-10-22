@@ -61,19 +61,31 @@ def make_dataset(
     raw_dir: str | Path,
     cfg: Config,
     training: bool = False,
+    cache: bool = False,
 ) -> tf.data.Dataset:
-    """(image float32 [0, 255], label int32) batches. Shuffled and augmented only when training."""
+    """(image float32 [0, 255], label int32) batches. Shuffled and augmented only when training.
+
+    ``cache`` keeps decoded images in memory after the first pass (for multi-epoch
+    training; about 0.6 MB per image at 224x224). Augmentation runs after the cache,
+    so every epoch still sees new random augmentations.
+    """
+    if training:
+        # Shuffle the order once up front, so the bounded shuffle buffer below mixes
+        # classes even though the split file is sorted by path.
+        df = df.sample(frac=1.0, random_state=cfg.data.seed)
     paths = [str(Path(raw_dir) / p) for p in df["path"]]
     labels = df["label_idx"].to_numpy(dtype=np.int32)
     size = cfg.data.image_size
 
     ds = tf.data.Dataset.from_tensor_slices((paths, labels))
-    if training:
-        ds = ds.shuffle(len(paths), seed=cfg.data.seed, reshuffle_each_iteration=True)
     ds = ds.map(
         lambda p, y: (decode_and_resize(tf.io.read_file(p), size), y),
         num_parallel_calls=tf.data.AUTOTUNE,
     )
+    if cache:
+        ds = ds.cache()
+    if training:
+        ds = ds.shuffle(min(len(paths), 1024), seed=cfg.data.seed, reshuffle_each_iteration=True)
     ds = ds.batch(cfg.data.batch_size)
     if training:
         augment = build_augmentation(cfg.augment, cfg.data.seed)
