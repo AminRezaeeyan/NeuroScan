@@ -30,5 +30,6 @@ mlflow.db
 mlartifacts/
 mlruns/
 
-# Run bundles copied from Google Drive
+# Run bundles copied from Google Drive, and Colab source archives
 runs/
+dist/
