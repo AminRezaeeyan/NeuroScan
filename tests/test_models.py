@@ -1,0 +1,60 @@
+"""Model-builder smoke tests: build only, no training."""
+
+import numpy as np
+import pytest
+
+from neuroscan.config import CLASS_NAMES, Config, load_config
+from neuroscan.models import BUILDERS, build_model
+from neuroscan.models.common import BACKBONE_LAYER, FEATURES_LAYER, set_backbone_trainable
+
+CONFIGS = {
+    "baseline_cnn": "configs/baseline_cnn.yaml",
+    "cnn_gap": "configs/cnn_gap.yaml",
+    "efficientnet_b0": "configs/efficientnet_b0.yaml",
+    "resnet50": "configs/resnet50.yaml",
+}
+
+
+def _config(name: str) -> Config:
+    # No ImageNet download in tests.
+    return load_config(CONFIGS[name], overrides={"model.weights": None})
+
+
+def test_every_builder_has_a_config():
+    assert set(CONFIGS) == set(BUILDERS)
+
+
+@pytest.mark.parametrize("name", sorted(CONFIGS))
+def test_builder_shapes(name):
+    model = build_model(_config(name))
+    assert model.input_shape == (None, 224, 224, 3)
+    assert model.output_shape == (None, len(CLASS_NAMES))
+    assert model.optimizer is not None
+    model.get_layer(FEATURES_LAYER)
+
+    probs = model.predict(np.full((2, 224, 224, 3), 128.0, np.float32), verbose=0)
+    np.testing.assert_allclose(probs.sum(axis=1), 1.0, rtol=1e-5)
+
+
+def test_gap_variant_is_much_smaller():
+    baseline = build_model(_config("baseline_cnn")).count_params()
+    gap = build_model(_config("cnn_gap")).count_params()
+    assert baseline > 9_000_000
+    assert gap < 500_000
+
+
+@pytest.mark.parametrize("name", ["efficientnet_b0", "resnet50"])
+def test_transfer_models_start_frozen_and_unfreeze_top(name):
+    cfg = _config(name)
+    model = build_model(cfg)
+    backbone = model.get_layer(BACKBONE_LAYER)
+    assert not backbone.trainable
+
+    set_backbone_trainable(model, cfg.model.fine_tune_layers)
+    trainable = [layer for layer in backbone.layers if layer.trainable]
+    assert 0 < len(trainable) <= cfg.model.fine_tune_layers
+
+
+def test_unknown_model_name():
+    with pytest.raises(ValueError, match="Unknown model"):
+        build_model(load_config(CONFIGS["baseline_cnn"], overrides={"model.name": "vgg"}))

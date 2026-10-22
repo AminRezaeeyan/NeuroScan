@@ -1,0 +1,12 @@
+# Two stages: frozen backbone for head_epochs, then top layers unfrozen at 10x lower LR.
+run_name: resnet50
+model:
+  name: resnet50
+  weights: imagenet
+  dropout: 0.3
+  fine_tune_layers: 40   # roughly the conv5 stage
+train:
+  epochs: 40
+  head_epochs: 10
+  learning_rate: 0.001
+  fine_tune_lr_scale: 0.1

@@ -1,0 +1,12 @@
+# Two stages: frozen backbone for head_epochs, then top layers unfrozen at 10x lower LR.
+run_name: efficientnet-b0
+model:
+  name: efficientnet_b0
+  weights: imagenet
+  dropout: 0.3
+  fine_tune_layers: 60   # roughly blocks 6-7 and the top conv
+train:
+  epochs: 40
+  head_epochs: 10
+  learning_rate: 0.001
+  fine_tune_lr_scale: 0.1

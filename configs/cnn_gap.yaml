@@ -1,0 +1,9 @@
+# Baseline CNN with GlobalAveragePooling -> Dense(128) instead of Flatten -> Dense(512).
+run_name: cnn-gap
+model:
+  name: cnn_gap
+  dense_units: 128
+  dropout: 0.5
+train:
+  epochs: 60
+  learning_rate: 0.001

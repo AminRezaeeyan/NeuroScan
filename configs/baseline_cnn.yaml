@@ -1,0 +1,9 @@
+# Baseline: the original notebook architecture, retrained on the clean split.
+run_name: baseline-cnn
+model:
+  name: baseline_cnn
+  dense_units: 512
+  dropout: 0.5
+train:
+  epochs: 60
+  learning_rate: 0.001
