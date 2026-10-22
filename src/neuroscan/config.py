@@ -8,7 +8,7 @@ from typing import Any
 
 import yaml
 
-# Alphabetical, matching the Kaggle folder names and the legacy model's output order.
+# Alphabetical, matching the Kaggle folder names and the model output order.
 CLASS_NAMES: tuple[str, ...] = ("glioma", "meningioma", "notumor", "pituitary")
 NO_TUMOR_INDEX = CLASS_NAMES.index("notumor")
 

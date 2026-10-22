@@ -1,4 +1,4 @@
-# Baseline: the original notebook architecture, retrained on the clean split.
+# Baseline CNN: 4 conv blocks, Flatten -> Dense(512).
 run_name: baseline-cnn
 model:
   name: baseline_cnn
