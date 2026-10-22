@@ -1,4 +1,4 @@
-# 🧠 NeuroScan - Brain Tumor Classifier 
+# 🧠 NeuroScan - Brain Tumor Classifier
 
 ![Kaggle](https://img.shields.io/badge/Kaggle-Notebook-blue?logo=kaggle&link=https://www.kaggle.com/code/aminrezaeeyan/brain-tumor-classification-using-cnn-98-32)
 ![Accuracy](https://img.shields.io/badge/accuracy-98.32%25-brightgreen)
@@ -34,13 +34,13 @@
 
 A powerful CNN model that classifies brain tumors into four categories with **98.32% accuracy**:
 
-1. **Glioma** - Irregular tumors originating from glial cells  
-2. **Meningioma** - Well-defined tumors of the meninges  
-3. **Pituitary** - Hormone-affecting glandular tumors  
+1. **Glioma** - Irregular tumors originating from glial cells
+2. **Meningioma** - Well-defined tumors of the meninges
+3. **Pituitary** - Hormone-affecting glandular tumors
 4. **No-tumor** - Healthy brain scans
 
 <div align="center">
-  <img src="https://github.com/AminRezaeeyan/NeuroScan/blob/main/images/samples.png" width="100%">
+  <img src="docs/images/samples.png" width="100%">
 </div>
 
 ---
@@ -59,8 +59,8 @@ A powerful CNN model that classifies brain tumors into four categories with **98
   - REST API endpoints
 
 <div align="center">
-  <img src="https://github.com/AminRezaeeyan/CNN-Brain-Tumor-Classifier/blob/main/images/architecture1.svg" width="100%">
-  <img src="https://github.com/AminRezaeeyan/CNN-Brain-Tumor-Classifier/blob/main/images/learning_curve.png" width="100%">
+  <img src="docs/images/architecture1.svg" width="100%">
+  <img src="docs/images/learning_curve.png" width="100%">
 </div>
 
 ---
@@ -68,9 +68,9 @@ A powerful CNN model that classifies brain tumors into four categories with **98
 ## 🌐 Web Interface
 
 <div align="center" style="display: flex; justify-content: center; align-items: center; flex-wrap: wrap; gap: 10px;">
-  <img src="https://github.com/AminRezaeeyan/NeuroScan/blob/main/images/webui1.png" style="height: 350px; width: auto; object-fit: contain; flex: 1 1 auto; max-width: 30%; min-width: 250px;">
-  <img src="https://github.com/AminRezaeeyan/NeuroScan/blob/main/images/webui2.png" style="height: 350px; width: auto; object-fit: contain; flex: 1 1 auto; max-width: 30%; min-width: 250px;">
-  <img src="https://github.com/AminRezaeeyan/NeuroScan/blob/main/images/webui3.png" style="height: 350px; width: auto; object-fit: contain; flex: 1 1 auto; max-width: 30%; min-width: 250px;">
+  <img src="docs/images/webui1.png" style="height: 350px; width: auto; object-fit: contain; flex: 1 1 auto; max-width: 30%; min-width: 250px;">
+  <img src="docs/images/webui2.png" style="height: 350px; width: auto; object-fit: contain; flex: 1 1 auto; max-width: 30%; min-width: 250px;">
+  <img src="docs/images/webui3.png" style="height: 350px; width: auto; object-fit: contain; flex: 1 1 auto; max-width: 30%; min-width: 250px;">
 </div>
 
 **Features**:
@@ -85,7 +85,7 @@ A powerful CNN model that classifies brain tumors into four categories with **98
 
 ### Manual Installation
 ``` bash
-# Clone repository 
+# Clone repository
 git clone https://github.com/AminRezaeeyan/NeuroScan.git
 cd NeuroScan
 
@@ -137,7 +137,7 @@ def predict_tumor(image_path):
     Args:
         image_path: Path to MRI image (JPEG/PNG)
     Returns:
-        dict: {'class': 'glioma/meningioma/pituitary/notumor', 
+        dict: {'class': 'glioma/meningioma/pituitary/notumor',
               'confidence': float,
               'probabilities': dict}
     """
@@ -146,11 +146,11 @@ def predict_tumor(image_path):
     img = img.resize((224, 224))  # Resize to 224x224
     img = img.convert('RGB')  # Ensure RGB format
     img_array = np.expand_dims(img_array, axis=0)  # Add batch dimension
-    
+
     # Make prediction
     pred = model.predict(img_array)
     classes = ['Glioma', 'Meningioma', 'No Tumor', 'Pituitary']
-    
+
     return {
         'class': classes[np.argmax(pred)],
         'confidence': float(np.max(pred)),
@@ -176,7 +176,7 @@ Sample Output:
 }
 ```
 
-⚠️ **Important Note:**  
+⚠️ **Important Note:**
 The model automatically normalizes input images in its first layer. Do not manually normalize (divide by 255) as this will cause incorrect predictions. Simply pass the raw image array (0-255 values).
 
 ---

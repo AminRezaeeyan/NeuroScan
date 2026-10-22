@@ -1,9 +1,0 @@
-/* Import all CSS modules */
-@import 'variables.css';
-@import 'base.css';
-@import 'navigation.css';
-@import 'home.css';
-@import 'upload.css';
-@import 'result.css';
-@import 'footer.css';
-

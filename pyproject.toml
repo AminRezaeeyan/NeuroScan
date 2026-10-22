@@ -57,7 +57,7 @@ packages = ["src/neuroscan"]
 [tool.ruff]
 line-length = 100
 target-version = "py310"
-extend-exclude = ["notebooks", "colab"]
+extend-exclude = ["notebooks", "*.md"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "SIM", "S"]
