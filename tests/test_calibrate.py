@@ -76,7 +76,7 @@ def test_packaged_model_round_trip(raw_dir, split_csv, tiny_config_file, tmp_pat
     packaged = mlflow.pyfunc.load_model(f"models:/{REGISTERED_MODEL}@champion")
     x = np.random.default_rng(0).uniform(0, 255, (3, 64, 64, 3)).astype(np.float32)
     out = packaged.predict(x)
-    assert list(out.columns) == [*CLASS_NAMES, "prediction", "confidence"]
+    assert list(out.columns) == [*CLASS_NAMES, "prediction", "confidence", "ood_score", "status"]
     np.testing.assert_allclose(out[list(CLASS_NAMES)].sum(axis=1), 1.0, rtol=1e-5)
 
     raw = mlflow.keras.load_model(f"runs:/{result.run_id}/model").predict(x, verbose=0)

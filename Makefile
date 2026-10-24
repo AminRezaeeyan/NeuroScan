@@ -1,4 +1,4 @@
-.PHONY: install lint typecheck test mlflow data dedup split import eval select calibrate explain figures colab-package
+.PHONY: install lint typecheck test mlflow data dedup split import eval select calibrate explain ood-data ood figures colab-package
 
 install:
 	uv sync --all-extras
@@ -48,6 +48,14 @@ calibrate:
 # Grad-CAM heatmaps and the brain-mask check for the champion (test split)
 explain:
 	uv run python -m neuroscan.explain --champion
+
+# Public non-brain-MRI images that test OOD rejection (300 per source, data/ood/)
+ood-data:
+	uv run python -m neuroscan.data.ood_download --out data/ood
+
+# Fit the OOD detector on the champion, evaluate it, package and move @champion to it
+ood:
+	uv run python -m neuroscan.ood --champion --register
 
 # Export README figures and docs/results.md from MLflow
 figures:

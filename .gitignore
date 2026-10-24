@@ -19,6 +19,7 @@ data/raw/
 data/cache/
 data/legacy/
 data/manual_samples/
+data/ood/
 
 # Model files live in the MLflow registry, not in git
 *.keras
@@ -27,6 +28,7 @@ data/manual_samples/
 
 # MLflow (local tracking server)
 mlflow.db
+mlflow.db-journal
 mlartifacts/
 mlruns/
 

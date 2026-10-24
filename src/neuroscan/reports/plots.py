@@ -154,3 +154,20 @@ def gradcam_grid(
     fig.suptitle("Grad-CAM: correct (✓) and wrong (✗) predictions per class")
     fig.tight_layout(rect=(0, 0, 1, 0.98))
     return fig
+
+
+def ood_histogram(scores: Mapping[str, np.ndarray], threshold: float) -> Figure:
+    """Mahalanobis score distributions (log scale) with the rejection threshold."""
+    fig, ax = plt.subplots(figsize=(7, 3.6))
+    finite = np.concatenate([s[np.isfinite(s)] for s in scores.values()])
+    bins = np.logspace(np.log10(max(finite.min(), 1e-3)), np.log10(finite.max()), 60)
+    for name, values in scores.items():
+        ax.hist(values, bins=bins.tolist(), histtype="step", lw=1.6, density=True, label=name)
+    ax.axvline(threshold, color="black", ls="--", lw=1, label="reject above")
+    ax.set_xscale("log")
+    ax.set_xlabel("Mahalanobis score (higher = less like training MRIs)")
+    ax.set_ylabel("density")
+    ax.legend(fontsize=8)
+    ax.grid(alpha=0.3)
+    fig.tight_layout()
+    return fig
