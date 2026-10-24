@@ -44,6 +44,7 @@ CHAMPION_ARTIFACTS = {
     "evaluation/test/misclassified.png": "champion_misclassified.png",
     "calibration/reliability_test.png": "champion_reliability.png",
     "explain/test/gradcam_grid.png": "champion_gradcam.png",
+    "ood/score_histogram.png": "champion_ood_scores.png",
 }
 
 
@@ -121,6 +122,38 @@ def explain_lines(client: Any, run_id: str) -> list[str]:
     ]
 
 
+def ood_lines(client: Any, run_id: str) -> list[str]:
+    m = client.get_run(run_id).data.metrics
+    if "ood.threshold" not in m:
+        return []
+    sources = sorted(
+        {k.split(".")[1] for k in m if k.startswith("ood.") and k.endswith(".rejected")}
+        - {"val", "test", "all"}
+    )
+    lines = [
+        "## Refusing what the model shouldn't answer (test split)",
+        "",
+        f"- Real test MRIs rejected as out of distribution: {m['ood.test.mri_rejected']:.1%} "
+        "(threshold set so about 2% of validation MRIs are rejected).",
+        f"- Flagged uncertain (calibrated confidence < {m['ood.uncertain_threshold']:.2f}): "
+        f"{m['ood.test.uncertain']:.1%}; accuracy on the answered rest: "
+        f"{m['ood.test.accuracy_when_answered']:.1%}.",
+        "",
+        "| OOD source | Rejected | AUROC (Mahalanobis / max softmax) "
+        "| FPR at 95% TPR (Mahalanobis / max softmax) |",
+        "| --- | ---: | ---: | ---: |",
+    ]
+    for s in sources:
+        maha, msp = f"ood.{s}.mahalanobis", f"ood.{s}.msp"
+        lines.append(
+            f"| {s.replace('_', ' ')} | {m[f'ood.{s}.rejected']:.1%} "
+            f"| {m[f'{maha}.auroc']:.3f} / {m[f'{msp}.auroc']:.3f} "
+            f"| {m[f'{maha}.fpr_at_95tpr']:.1%} / {m[f'{msp}.fpr_at_95tpr']:.1%} |"
+        )
+    lines += ["", "![OOD scores](figures/champion_ood_scores.png)", ""]
+    return lines
+
+
 def results_markdown(
     df: pd.DataFrame, steps: list[str], champion: str, extra: list[str] | None = None
 ) -> str:
@@ -158,8 +191,15 @@ def export(client: Any, docs: Path) -> str:
     plt.close(fig)
 
     champion_run = df.loc[decision.winner, "run_id"]
+    available = {
+        a.path
+        for folder in {Path(k).parent.as_posix() for k in CHAMPION_ARTIFACTS}
+        for a in client.list_artifacts(champion_run, folder)
+    }
     with tempfile.TemporaryDirectory() as tmp:
         for artifact, name in CHAMPION_ARTIFACTS.items():
+            if artifact not in available:
+                continue
             local = client.download_artifacts(champion_run, artifact, tmp)
             save_compact(Path(local), figures / name)
 
@@ -177,6 +217,7 @@ def export(client: Any, docs: Path) -> str:
             "",
         ]
     extra += explain_lines(client, str(champion_run))
+    extra += ood_lines(client, str(champion_run))
     (docs / "results.md").write_text(results_markdown(df, decision.steps, decision.winner, extra))
     return decision.winner
 
