@@ -24,6 +24,7 @@ def test_train_writes_complete_bundle(raw_dir, split_csv, tiny_config_file, tmp_
     assert meta["model"] == "cnn_gap"
     assert meta["split_hash"] == bundle.file_hash(split_csv)
     assert meta["end_ms"] >= meta["start_ms"]
+    assert meta["end_ms"] <= bundle.now_ms()
     assert meta["epochs_trained"] == 2
     assert meta["num_train"] == 8 and meta["num_val"] == 4
     assert meta["params"] == keras.models.load_model(run_dir / bundle.MODEL_FILE).count_params()
@@ -31,6 +32,7 @@ def test_train_writes_complete_bundle(raw_dir, split_csv, tiny_config_file, tmp_
     history = json.loads((run_dir / bundle.HISTORY_FILE).read_text())
     assert len(history[MONITOR]) == 2
     assert {"loss", "val_loss", "accuracy", "learning_rate", "stage"} <= history.keys()
+    assert "epoch_end_ms" not in history
 
     model = keras.models.load_model(run_dir / bundle.MODEL_FILE)
     assert model.output_shape == (None, 4)
@@ -100,3 +102,47 @@ def test_interrupted_run_resumes(raw_dir, split_csv, tiny_config_file, tmp_path,
     history = json.loads((run_dir / bundle.HISTORY_FILE).read_text())
     assert meta["start_ms"] == start_ms  # same run, not a new one
     assert len(history[MONITOR]) == 3
+
+
+def test_finalize_completes_a_run_whose_session_ended(
+    raw_dir, split_csv, tiny_config_file, tmp_path, monkeypatch
+):
+    from neuroscan import train as train_module
+
+    cfg = load_config(tiny_config_file)
+    monkeypatch.setattr(
+        train_module, "finalize", lambda *a: (_ for _ in ()).throw(RuntimeError("session ended"))
+    )
+    with pytest.raises(RuntimeError, match="session ended"):
+        train(cfg, raw_dir, split_csv, tmp_path / "runs")
+    monkeypatch.undo()
+
+    run_dir = tmp_path / "runs" / "tiny"
+    assert not (run_dir / bundle.MODEL_FILE).exists()
+    train_module.finalize(run_dir, cfg, split_csv)
+    meta = json.loads((run_dir / bundle.META_FILE).read_text())
+    assert (run_dir / bundle.MODEL_FILE).is_file()
+    assert meta["epochs_trained"] == 2 and meta["start_ms"] <= meta["end_ms"]
+
+
+def test_resume_with_new_code_records_the_new_commit(
+    raw_dir, split_csv, tiny_config_file, tmp_path, monkeypatch
+):
+    cfg = load_config(tiny_config_file, {"train.epochs": 1})
+    run_dir = tmp_path / "runs" / "tiny"
+    run_dir.mkdir(parents=True)
+    old = {
+        "run_name": "tiny",
+        "model": "cnn_gap",
+        "git_commit": "old123",
+        "start_ms": 1,
+        "split_file": "split.csv",
+        "split_hash": "x",
+        "gpu": "cpu",
+    }
+    (run_dir / bundle.META_FILE).write_text(json.dumps(old))
+    monkeypatch.setattr(bundle, "git_commit", lambda: "new456")
+    train(cfg, raw_dir, split_csv, tmp_path / "runs")
+    meta = json.loads((run_dir / bundle.META_FILE).read_text())
+    assert meta["git_commit"] == "new456"
+    assert meta["first_git_commit"] == "old123"

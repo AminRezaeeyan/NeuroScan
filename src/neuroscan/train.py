@@ -29,6 +29,7 @@ from neuroscan.models.common import compile_model, set_backbone_trainable
 from neuroscan.reports.plots import learning_curves
 
 MONITOR = "val_macro_f1"
+EPOCH_END = "epoch_end_ms"  # wall-clock time each epoch ended
 
 
 class MacroF1(keras.callbacks.Callback):
@@ -52,6 +53,7 @@ class MacroF1(keras.callbacks.Callback):
         logs["learning_rate"] = float(
             keras.ops.convert_to_numpy(self.model.optimizer.learning_rate)
         )
+        logs[EPOCH_END] = bundle.now_ms()
 
 
 def cap_per_class(df: pd.DataFrame, max_images: int, seed: int) -> pd.DataFrame:
@@ -144,6 +146,12 @@ def train(cfg: Config, raw_dir: Path, split_csv: Path, out: Path, overwrite: boo
     if meta_path.exists():  # resuming
         meta = bundle.read_json(meta_path)
         print(f"Resuming {run_dir} (started {meta['start_ms']})")
+        commit = bundle.git_commit()
+        if commit != meta["git_commit"]:
+            # The trained weights come from the code that runs now; keep the first commit too.
+            meta.setdefault("first_git_commit", meta["git_commit"])
+            meta["git_commit"] = commit
+            bundle.write_json(meta_path, meta)
     else:
         meta = {
             "run_name": cfg.run_name,
@@ -169,7 +177,6 @@ def train(cfg: Config, raw_dir: Path, split_csv: Path, out: Path, overwrite: boo
 
     model = build_model(cfg)
     two_stage = cfg.model.name in TRANSFER_MODELS and cfg.train.head_epochs > 0
-    stages = ["head", "finetune"] if two_stage else ["main"]
 
     if two_stage:
         head_final = run_dir / bundle.CHECKPOINT_DIR / "head_final.keras"
@@ -199,9 +206,39 @@ def train(cfg: Config, raw_dir: Path, split_csv: Path, out: Path, overwrite: boo
             callbacks=callbacks(cfg, val_ds, y_val, run_dir, "main", early_stop=True),
         )
 
+    return finalize(run_dir, cfg, split_csv)
+
+
+def end_time_ms(meta: dict[str, Any], epoch_ends: list[float], ckpt_dir: Path) -> int:
+    """When the last epoch ended.
+
+    Uses the logged epoch end times. Older logs don't have them; then the span between the
+    first and last checkpoint file is added to the start time. File times are only used as
+    a span because a zip downloaded from Google Drive shifts them all by the same offset.
+    """
+    if epoch_ends:
+        return int(max(epoch_ends))
+    times = [p.stat().st_mtime for p in ckpt_dir.rglob("*") if p.is_file()]
+    return int(meta["start_ms"] + (max(times) - min(times)) * 1000)
+
+
+def finalize(run_dir: Path, cfg: Config, split_csv: Path) -> Path:
+    """Write history, best model, figure and final meta from the checkpoints and logs.
+
+    Also used on its own (``--finalize``) when a session ended after the last epoch but
+    before the bundle was written; the end time is that of the newest checkpoint file.
+    """
+    ckpt_dir = run_dir / bundle.CHECKPOINT_DIR
+    meta_path = run_dir / bundle.META_FILE
+    meta = bundle.read_json(meta_path)
+    two_stage = cfg.model.name in TRANSFER_MODELS and cfg.train.head_epochs > 0
+    stages = ["head", "finetune"] if two_stage else ["main"]
+
     history: dict[str, list[Any]] = {}
+    epoch_ends: list[float] = []
     for stage in stages:
         part = read_history(run_dir, stage)
+        epoch_ends += part.pop(EPOCH_END, [])
         n = len(part.get(MONITOR, []))
         for key, values in part.items():
             history.setdefault(key, []).extend(values)
@@ -210,25 +247,32 @@ def train(cfg: Config, raw_dir: Path, split_csv: Path, out: Path, overwrite: boo
 
     ckpt, best_stage, best_epoch, best_f1 = best_checkpoint(run_dir, stages)
     shutil.copy(ckpt, run_dir / bundle.MODEL_FILE)
+    params = keras.models.load_model(run_dir / bundle.MODEL_FILE).count_params()
 
     boundary = cfg.train.head_epochs if two_stage else 0
     numeric = {k: v for k, v in history.items() if k != "stage"}
+    (run_dir / bundle.FIGURES_DIR).mkdir(exist_ok=True)
     learning_curves(numeric, boundary).savefig(
         run_dir / bundle.FIGURES_DIR / "learning_curves.png", dpi=120
     )
 
+    split = load_split(split_csv)
     meta.update(
-        end_ms=bundle.now_ms(),
+        end_ms=end_time_ms(meta, epoch_ends, ckpt_dir),
         epochs_trained=len(history.get(MONITOR, [])),
         best_epoch=best_epoch,
         best_stage=best_stage,
         best_val_macro_f1=best_f1,
-        num_train=len(train_df),
-        num_val=len(val_df),
-        params=model.count_params(),
+        num_train=len(
+            cap_per_class(split[split["split"] == "train"], cfg.train.max_images, cfg.data.seed)
+        ),
+        num_val=len(
+            cap_per_class(split[split["split"] == "val"], cfg.train.max_images, cfg.data.seed)
+        ),
+        params=params,
     )
     bundle.write_json(meta_path, meta)
-    shutil.rmtree(run_dir / bundle.CHECKPOINT_DIR)
+    shutil.rmtree(ckpt_dir)
     print(
         f"Run bundle written to {run_dir} (best val macro F1 {best_f1:.4f}, epoch {best_epoch + 1})"
     )
@@ -258,7 +302,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawTextHelpFormatter
     )
-    parser.add_argument("--config", type=Path, required=True)
+    parser.add_argument("--config", type=Path)
     parser.add_argument("--out", type=Path, default=Path("runs"))
     parser.add_argument("--raw-dir", type=Path, help="defaults to data.raw_dir in the config")
     parser.add_argument("--split-csv", type=Path, help="defaults to data.split_csv in the config")
@@ -267,8 +311,21 @@ def main() -> None:
     )
     parser.add_argument("--dry-run", action="store_true", help="1 epoch per stage on 32 images")
     parser.add_argument("--overwrite", action="store_true", help="replace a finished run")
+    parser.add_argument(
+        "--finalize",
+        type=Path,
+        metavar="RUN_DIR",
+        help="only write the bundle of a run whose training finished (uses RUN_DIR/config.yaml)",
+    )
     args = parser.parse_args()
 
+    if args.finalize:
+        cfg = load_config(args.finalize / bundle.CONFIG_FILE)
+        finalize(args.finalize, cfg, args.split_csv or Path(cfg.data.split_csv))
+        return
+
+    if args.config is None:
+        parser.error("--config is required")
     overrides = parse_set(args.set)
     if args.dry_run:
         overrides = {**dry_run_overrides(args.config), **overrides}
