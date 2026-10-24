@@ -201,17 +201,22 @@ def shortcut_check(
     return out
 
 
-def cpu_latency_ms(model: keras.Model, runs: int = 50, warmup: int = 5) -> dict[str, float]:
-    """Single-image inference latency on CPU (p50 and p95)."""
+def cpu_latency_ms(model: keras.Model, runs: int = 100, warmup: int = 10) -> dict[str, float]:
+    """Single-image inference latency on CPU (p50 and p95) of the compiled graph.
+
+    The model runs inside ``tf.function``, as a server would run it. Eager calls add
+    per-layer Python overhead that punishes deep models with many small layers.
+    """
     import tensorflow as tf
 
     size = model.input_shape[1]
     x = tf.constant(np.full((1, size, size, 3), 128.0, np.float32))
     times = []
     with tf.device("/CPU:0"):
+        infer = tf.function(lambda batch: model(batch, training=False))
         for i in range(warmup + runs):
             start = time.perf_counter()
-            model(x, training=False)
+            infer(x).numpy()
             if i >= warmup:
                 times.append((time.perf_counter() - start) * 1000)
     return {
@@ -314,6 +319,9 @@ def main() -> None:
     parser.add_argument("--eval-set", choices=EVAL_SETS, nargs="+", default=["test"])
     parser.add_argument("--raw-dir", type=Path, default=Path("data/raw"))
     parser.add_argument("--split-csv", type=Path, default=Path("splits/v1.csv"))
+    parser.add_argument(
+        "--latency-only", action="store_true", help="only re-measure and log CPU latency"
+    )
     args = parser.parse_args()
 
     import mlflow
@@ -323,6 +331,14 @@ def main() -> None:
 
     get_client()
     model = mlflow.keras.load_model(f"runs:/{args.run_id}/model")
+    if args.latency_only:
+        latency = cpu_latency_ms(model)
+        client = get_client()
+        for eval_set in args.eval_set:
+            for key, value in latency.items():
+                client.log_metric(args.run_id, f"{eval_set}.{key}", value)
+        print({k: round(v, 1) for k, v in latency.items()})
+        return
     split = load_split(args.split_csv)
     for eval_set in args.eval_set:
         report = evaluate(model, split, args.raw_dir, eval_set)
