@@ -43,3 +43,17 @@ The champion is served with its temperature applied.
 A sanity check, not proof of correct reasoning: the mask is a simple intensity threshold.
 
 ![Grad-CAM](figures/champion_gradcam.png)
+
+## Refusing what the model shouldn't answer (test split)
+
+- Real test MRIs rejected as out of distribution: 2.2% (threshold set so about 2% of validation MRIs are rejected).
+- Flagged uncertain (calibrated confidence < 0.86): 8.7%; accuracy on the answered rest: 98.8%.
+
+| OOD source | Rejected | AUROC (Mahalanobis / max softmax) | FPR at 95% TPR (Mahalanobis / max softmax) |
+| --- | ---: | ---: | ---: |
+| chest xray | 100.0% | 1.000 / 0.961 | 0.0% / 31.9% |
+| ct | 94.3% | 0.994 / 0.947 | 1.3% / 39.0% |
+| natural photos | 100.0% | 1.000 / 0.965 | 0.0% / 25.7% |
+| spine mri | 100.0% | 0.999 / 0.866 | 0.0% / 80.3% |
+
+![OOD scores](figures/champion_ood_scores.png)
