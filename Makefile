@@ -1,4 +1,4 @@
-.PHONY: install lint typecheck test mlflow data dedup split import eval select figures colab-package
+.PHONY: install lint typecheck test mlflow data dedup split import eval select calibrate explain figures colab-package
 
 install:
 	uv sync --all-extras
@@ -40,6 +40,14 @@ eval:
 # Compare evaluated models and apply docs/model_selection.md: make select [APPLY=1]
 select:
 	uv run python -m neuroscan.tracking.select $(if $(APPLY),--apply,)
+
+# Calibrate the champion (temperature on val), package it and move @champion to it
+calibrate:
+	uv run python -m neuroscan.calibrate --champion --register
+
+# Grad-CAM heatmaps and the brain-mask check for the champion (test split)
+explain:
+	uv run python -m neuroscan.explain --champion
 
 # Export README figures and docs/results.md from MLflow
 figures:

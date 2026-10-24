@@ -22,6 +22,7 @@ import pandas as pd
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 from matplotlib.figure import Figure  # noqa: E402
+from PIL import Image  # noqa: E402
 
 from neuroscan.tracking import REGISTERED_MODEL, get_client  # noqa: E402
 from neuroscan.tracking.select import (  # noqa: E402
@@ -41,7 +42,19 @@ CHAMPION_ARTIFACTS = {
     "figures/learning_curves.png": "champion_learning_curves.png",
     "evaluation/test/confusion_matrix.png": "champion_confusion_matrix.png",
     "evaluation/test/misclassified.png": "champion_misclassified.png",
+    "calibration/reliability_test.png": "champion_reliability.png",
+    "explain/test/gradcam_grid.png": "champion_gradcam.png",
 }
+
+
+def save_compact(src: Path, dst: Path, max_bytes: int = 600_000) -> None:
+    """Copy a PNG, reducing it to a 256-color palette if it's large (photos + heatmaps)."""
+    shutil.copy(src, dst)
+    if dst.stat().st_size > max_bytes:
+        with Image.open(src) as img:
+            img.convert("RGB").quantize(colors=256, method=Image.Quantize.MEDIANCUT).save(
+                dst, optimize=True
+            )
 
 
 def comparison_figure(df: pd.DataFrame, champion: str) -> Figure:
@@ -70,7 +83,47 @@ def comparison_figure(df: pd.DataFrame, champion: str) -> Figure:
     return fig
 
 
-def results_markdown(df: pd.DataFrame, steps: list[str], champion: str) -> str:
+def calibration_table(client: Any, df: pd.DataFrame) -> list[str]:
+    """Temperature and test ECE/NLL before and after scaling, per model (if calibrated)."""
+    rows = [
+        "| Model | Temperature | Test ECE before → after | Test NLL before → after |",
+        "| --- | ---: | ---: | ---: |",
+    ]
+    for model, run_id in df["run_id"].items():
+        m = client.get_run(run_id).data.metrics
+        if "calibration.temperature" not in m:
+            continue
+        rows.append(
+            f"| {LABELS.get(str(model), str(model))} | {m['calibration.temperature']:.2f} "
+            f"| {m['calibration.test.ece_before']:.3f} → {m['calibration.test.ece_after']:.3f} "
+            f"| {m['calibration.test.nll_before']:.3f} → {m['calibration.test.nll_after']:.3f} |"
+        )
+    return rows if len(rows) > 2 else []
+
+
+def explain_lines(client: Any, run_id: str) -> list[str]:
+    m = client.get_run(run_id).data.metrics
+    if "explain.test.peak_in_brain" not in m:
+        return []
+    return [
+        "## Where the champion looks (Grad-CAM, test split)",
+        "",
+        f"- Heatmap peak inside the brain mask: {m['explain.test.peak_in_brain']:.1%} "
+        f"(chance, i.e. mask area: {m['explain.test.mask_area']:.1%}).",
+        f"- Share of heatmap mass inside the brain mask: {m['explain.test.mass_in_brain']:.1%}.",
+        "- Peak inside the brain for wrong predictions: "
+        f"{m['explain.test.wrong.peak_in_brain']:.1%}.",
+        "",
+        "A sanity check, not proof of correct reasoning: the mask is a simple intensity threshold.",
+        "",
+        "![Grad-CAM](figures/champion_gradcam.png)",
+        "",
+    ]
+
+
+def results_markdown(
+    df: pd.DataFrame, steps: list[str], champion: str, extra: list[str] | None = None
+) -> str:
     return "\n".join(
         [
             "# Model comparison",
@@ -89,6 +142,7 @@ def results_markdown(df: pd.DataFrame, steps: list[str], champion: str) -> str:
             "",
             "![Model comparison](figures/model_comparison.png)",
             "",
+            *(extra or []),
         ]
     )
 
@@ -107,9 +161,23 @@ def export(client: Any, docs: Path) -> str:
     with tempfile.TemporaryDirectory() as tmp:
         for artifact, name in CHAMPION_ARTIFACTS.items():
             local = client.download_artifacts(champion_run, artifact, tmp)
-            shutil.copy(local, figures / name)
+            save_compact(Path(local), figures / name)
 
-    (docs / "results.md").write_text(results_markdown(df, decision.steps, decision.winner))
+    extra = []
+    calibration = calibration_table(client, df)
+    if calibration:
+        extra += [
+            "## Calibration (temperature fitted on validation)",
+            "",
+            *calibration,
+            "",
+            "The champion is served with its temperature applied.",
+            "",
+            "![Reliability diagram](figures/champion_reliability.png)",
+            "",
+        ]
+    extra += explain_lines(client, str(champion_run))
+    (docs / "results.md").write_text(results_markdown(df, decision.steps, decision.winner, extra))
     return decision.winner
 
 

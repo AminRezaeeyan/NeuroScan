@@ -20,3 +20,26 @@ All four models use `splits/v1.csv`; metrics count each duplicate group once.
 **Champion:** EfficientNetB0. **Baseline:** Baseline CNN.
 
 ![Model comparison](figures/model_comparison.png)
+
+## Calibration (temperature fitted on validation)
+
+| Model | Temperature | Test ECE before → after | Test NLL before → after |
+| --- | ---: | ---: | ---: |
+| ResNet50 | 2.41 | 0.019 → 0.014 | 0.123 → 0.090 |
+| EfficientNetB0 | 2.02 | 0.024 → 0.011 | 0.138 → 0.111 |
+| CNN + GAP | 1.33 | 0.025 → 0.041 | 0.281 → 0.281 |
+| Baseline CNN | 2.39 | 0.031 → 0.023 | 0.178 → 0.138 |
+
+The champion is served with its temperature applied.
+
+![Reliability diagram](figures/champion_reliability.png)
+
+## Where the champion looks (Grad-CAM, test split)
+
+- Heatmap peak inside the brain mask: 99.6% (chance, i.e. mask area: 54.1%).
+- Share of heatmap mass inside the brain mask: 85.8%.
+- Peak inside the brain for wrong predictions: 97.6%.
+
+A sanity check, not proof of correct reasoning: the mask is a simple intensity threshold.
+
+![Grad-CAM](figures/champion_gradcam.png)
