@@ -6,7 +6,7 @@ import pytest
 
 from neuroscan.config import CLASS_NAMES, Config, load_config
 from neuroscan.models import BUILDERS, build_model
-from neuroscan.models.common import BACKBONE_LAYER, FEATURES_LAYER, set_backbone_trainable
+from neuroscan.models.common import FEATURES_LAYER, get_backbone, set_backbone_trainable
 
 CONFIGS = {
     "baseline_cnn": "configs/baseline_cnn.yaml",
@@ -48,7 +48,7 @@ def test_gap_variant_is_much_smaller():
 def test_transfer_models_start_frozen_and_unfreeze_top(name):
     cfg = _config(name)
     model = build_model(cfg)
-    backbone = model.get_layer(BACKBONE_LAYER)
+    backbone = get_backbone(model)
     assert not backbone.trainable
 
     set_backbone_trainable(model, cfg.model.fine_tune_from)
@@ -64,3 +64,26 @@ def test_transfer_models_start_frozen_and_unfreeze_top(name):
 def test_unknown_model_name():
     with pytest.raises(ValueError, match="Unknown model"):
         build_model(load_config(CONFIGS["baseline_cnn"], overrides={"model.name": "vgg"}))
+
+
+@pytest.mark.parametrize(
+    ("name", "expected_file"),
+    [
+        ("efficientnet_b0", "efficientnetb0_notop.h5"),
+        ("resnet50", "resnet50_weights_tf_dim_ordering_tf_kernels_notop.h5"),
+    ],
+)
+def test_imagenet_weights_file_name(name, expected_file, monkeypatch):
+    """The builders must request Keras' real ImageNet weights files (no network needed)."""
+    from keras.src.utils import file_utils
+
+    requested = []
+
+    def fake_get_file(fname=None, *args, **kwargs):
+        requested.append(fname)
+        raise RuntimeError("stop before downloading")
+
+    monkeypatch.setattr(file_utils, "get_file", fake_get_file)
+    with pytest.raises(RuntimeError, match="stop before downloading"):
+        build_model(load_config(CONFIGS[name]))
+    assert requested == [expected_file]

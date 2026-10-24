@@ -7,7 +7,6 @@ import keras
 from neuroscan.config import CLASS_NAMES, Config
 
 FEATURES_LAYER = "features"
-BACKBONE_LAYER = "backbone"
 
 
 def input_layer(cfg: Config) -> keras.KerasTensor:
@@ -30,13 +29,25 @@ def compile_model(model: keras.Model, learning_rate: float) -> keras.Model:
     return model
 
 
+def get_backbone(model: keras.Model) -> keras.Model:
+    """The pretrained backbone: the one nested model inside a transfer model.
+
+    Backbones keep their Keras default names (e.g. "efficientnetb0"): EfficientNet
+    derives its ImageNet weights file name from ``name``, so renaming breaks the download.
+    """
+    nested = [layer for layer in model.layers if isinstance(layer, keras.Model)]
+    if len(nested) != 1:
+        raise ValueError(f"Expected one nested backbone model, found {len(nested)}")
+    return nested[0]
+
+
 def set_backbone_trainable(model: keras.Model, fine_tune_from: str) -> None:
     """Unfreeze the backbone from the first layer named ``fine_tune_from*`` ("" = all of it).
 
     BatchNorm layers stay frozen: updating their statistics with small batches
     hurts fine-tuning (standard Keras transfer-learning advice).
     """
-    backbone = model.get_layer(BACKBONE_LAYER)
+    backbone = get_backbone(model)
     backbone.trainable = True
     layers = backbone.layers
     cutoff = 0

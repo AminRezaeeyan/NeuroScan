@@ -6,7 +6,6 @@ import keras
 
 from neuroscan.config import Config
 from neuroscan.models.common import (
-    BACKBONE_LAYER,
     FEATURES_LAYER,
     classifier_head,
     compile_model,
@@ -21,7 +20,6 @@ def build_model(cfg: Config) -> keras.Model:
         include_top=False,
         weights=cfg.model.weights,
         input_shape=inputs.shape[1:],
-        name=BACKBONE_LAYER,
     )
     backbone.trainable = False
     # training=False keeps BatchNorm in inference mode, also after unfreezing.
