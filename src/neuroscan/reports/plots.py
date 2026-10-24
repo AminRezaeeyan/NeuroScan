@@ -100,3 +100,57 @@ def misclassified_grid(errors: pd.DataFrame, raw_dir: Path, max_images: int = 16
     fig.suptitle(title)
     fig.tight_layout()
     return fig
+
+
+def reliability_diagram(
+    curves: Mapping[str, np.ndarray], y: np.ndarray, n_bins: int = 15, title: str = ""
+) -> Figure:
+    """Accuracy vs. confidence per bin for each set of probabilities (diagonal = calibrated)."""
+    fig, (ax, hist) = plt.subplots(
+        2, 1, figsize=(4.8, 5.6), sharex=True, gridspec_kw={"height_ratios": [3, 1]}
+    )
+    edges = np.linspace(0, 1, n_bins + 1)
+    centers = (edges[:-1] + edges[1:]) / 2
+    ax.plot([0, 1], [0, 1], "--", color="grey", lw=1, label="perfect calibration")
+    for name, probs in curves.items():
+        conf = probs.max(axis=1)
+        correct = probs.argmax(axis=1) == y
+        idx = np.clip(np.digitize(conf, edges[1:-1], right=True), 0, n_bins - 1)
+        acc = [correct[idx == b].mean() if (idx == b).any() else np.nan for b in range(n_bins)]
+        ax.plot(centers, acc, marker="o", ms=4, label=name)
+        hist.hist(conf, bins=edges, histtype="step", lw=1.5, label=name)
+    ax.set_ylabel("accuracy")
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1.02)
+    ax.legend(fontsize=8, loc="upper left")
+    ax.grid(alpha=0.3)
+    ax.set_title(title or "Reliability diagram")
+    hist.set_yscale("log")
+    hist.set_xlabel("confidence (top-class probability)")
+    hist.set_ylabel("images")
+    fig.tight_layout()
+    return fig
+
+
+def gradcam_grid(
+    examples: pd.DataFrame, images: Mapping[str, np.ndarray], cams: Mapping[str, np.ndarray]
+) -> Figure:
+    """One row per example: the image and its Grad-CAM overlay."""
+    n = len(examples)
+    cols = 4  # two (image, overlay) pairs per row
+    rows = max(1, int(np.ceil(n / 2)))
+    fig, axes = plt.subplots(rows, cols, figsize=(2.4 * cols, 2.5 * rows), squeeze=False)
+    for ax in axes.flat:
+        ax.axis("off")
+    for k, (_, row) in enumerate(examples.iterrows()):
+        r, c = divmod(k, 2)
+        gray = images[row["path"]].mean(axis=-1)
+        axes[r, 2 * c].imshow(gray, cmap="gray")
+        mark = "✓" if row["correct"] else "✗"
+        axes[r, 2 * c].set_title(f"{mark} true {row['label']}", fontsize=8)
+        axes[r, 2 * c + 1].imshow(gray, cmap="gray")
+        axes[r, 2 * c + 1].imshow(np.asarray(cams[row["path"]], np.float32), cmap="jet", alpha=0.45)
+        axes[r, 2 * c + 1].set_title(f"pred {row['pred']}", fontsize=8)
+    fig.suptitle("Grad-CAM: correct (✓) and wrong (✗) predictions per class")
+    fig.tight_layout(rect=(0, 0, 1, 0.98))
+    return fig
