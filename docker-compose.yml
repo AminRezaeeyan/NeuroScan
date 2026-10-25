@@ -28,4 +28,4 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
-    restart: unless-stopped
+    restart: "no"  # demo only: never auto-start

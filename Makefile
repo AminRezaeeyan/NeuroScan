@@ -1,4 +1,4 @@
-.PHONY: install lint typecheck test mlflow data dedup split import eval select calibrate explain ood-data ood figures serve docker-build docker-up docker-down security colab-package
+.PHONY: install lint typecheck test mlflow data dedup split import eval select calibrate explain ood-data ood figures serve docker-build docker-up docker-down security test-behavioral ci colab-package
 
 install:
 	uv sync --all-extras
@@ -13,6 +13,14 @@ typecheck:
 
 test:
 	uv run pytest -m "not slow and not behavioral"
+
+# The registered champion against fixed expectations (needs the local registry and data)
+test-behavioral:
+	uv run pytest -m behavioral -v
+
+# What CI runs
+ci: lint typecheck security
+	uv run pytest -m "not behavioral"
 
 mlflow:
 	uv run mlflow ui --backend-store-uri sqlite:///mlflow.db --default-artifact-root ./mlartifacts
@@ -62,11 +70,14 @@ serve:
 	uv run uvicorn neuroscan.serving.api:app --host 127.0.0.1 --port 8000
 
 # Same, in Docker (read-only container, registry mounted read-only)
+# The build copies ~3 GB of local packages into BuildKit; prune afterwards so build
+# cache doesn't accumulate on the root disk (the finished image is kept).
 docker-build:
 	docker compose build
+	docker builder prune -f
 
-docker-up:
-	docker compose up -d --build
+docker-up: docker-build
+	docker compose up -d
 	@echo "NeuroScan on http://127.0.0.1:8000 (model loads in ~30 s; check: docker compose ps)"
 
 docker-down:
