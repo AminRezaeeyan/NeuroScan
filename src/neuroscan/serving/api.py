@@ -20,6 +20,7 @@ import base64
 import io
 import logging
 import os
+import tempfile
 import threading
 import time
 from collections.abc import AsyncIterator, Callable
@@ -93,7 +94,12 @@ def load_from_registry(uri: str) -> ServedModel:
     from neuroscan.tracking import get_client
 
     client = get_client()
-    pyfunc = mlflow.pyfunc.load_model(uri)
+    # Copy the model out of the registry first: loading in place writes a metadata file
+    # next to the artifacts, which fails on a read-only registry (as in Docker).
+    local = mlflow.artifacts.download_artifacts(
+        artifact_uri=uri, dst_path=tempfile.mkdtemp(prefix="neuroscan-model-")
+    )
+    pyfunc = mlflow.pyfunc.load_model(local)
     predictor = pyfunc.unwrap_python_model()
     version, run_id = "unknown", None
     if uri.startswith("models:/"):
