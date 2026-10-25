@@ -1,0 +1,24 @@
+# Only pyproject.toml, uv.lock, README.md, LICENSE and src/ are needed in the build.
+.git
+.venv
+venv
+**/__pycache__
+**/*.py[cod]
+.mypy_cache
+.ruff_cache
+.pytest_cache
+.vscode
+data
+runs
+dist
+docs
+notebooks
+tests
+configs
+splits
+mlartifacts
+mlruns
+mlflow.db*
+*.keras
+*.md
+!README.md

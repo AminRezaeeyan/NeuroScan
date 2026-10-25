@@ -1,0 +1,31 @@
+# NeuroScan demo: make docker-up, then open http://127.0.0.1:8000
+#
+# The API reads the local MLflow registry (read-only) and serves the model behind
+# @champion. MLflow stores absolute artifact paths, so the registry is mounted at the
+# same path inside the container (${PWD} = the project folder; run from there).
+services:
+  api:
+    build:
+      context: .
+      additional_contexts:
+        uvcache: ${UV_CACHE_DIR:-${HOME}/.cache/uv}  # offline build from local packages
+      network: none  # build steps can't download anything
+    image: neuroscan-api:latest
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      NEUROSCAN_MODEL_URI: models:/neuroscan-classifier@champion
+      MLFLOW_TRACKING_URI: sqlite:///${PWD}/mlflow.db
+      NEUROSCAN_MAX_UPLOAD_MB: "10"
+      WORKERS: "1"
+    volumes:
+      - ./mlflow.db:${PWD}/mlflow.db:ro
+      - ./mlartifacts:${PWD}/mlartifacts:ro
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    restart: unless-stopped
