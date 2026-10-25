@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NeuroScan</title>
+  <meta name="description" content="Brain tumor MRI classification research demo with calibrated confidence, out-of-distribution rejection and Grad-CAM.">
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/app.css">
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+  <div class="notice" role="note">
+    <strong>Research demo, not a medical device.</strong>
+    Results must not be used for diagnosis or treatment decisions.
+  </div>
+
+  <header class="top">
+    <a class="brand" href="/" aria-label="NeuroScan home">
+      <svg class="logo" viewBox="0 0 32 32" aria-hidden="true">
+        <circle cx="16" cy="16" r="14" class="logo-ring"/>
+        <path d="M9 17c2-5 5-7 7-7s5 2 7 7M11 21c1.5-2.5 3-3.5 5-3.5s3.5 1 5 3.5" class="logo-wave"/>
+        <circle cx="16" cy="13" r="2" class="logo-dot"/>
+      </svg>
+      <span>NeuroScan</span>
+    </a>
+    <div class="top-meta">
+      <span class="pill" id="model-pill">model <b id="model-version">…</b></span>
+      <a class="pill pill-link" href="/docs">API</a>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="card intake" aria-labelledby="intake-title">
+      <h1 id="intake-title">Brain MRI tumor classifier</h1>
+      <p class="lede">
+        Classifies a 2D brain MRI slice as glioma, meningioma, pituitary tumor or no tumor.
+        It refuses images it wasn't built for, and says when it isn't sure.
+      </p>
+
+      <label class="drop" id="drop" for="file">
+        <input id="file" type="file" accept="image/png,image/jpeg,image/bmp" class="visually-hidden">
+        <svg viewBox="0 0 48 48" class="drop-icon" aria-hidden="true">
+          <path d="M24 31V13m0 0-7 7m7-7 7 7"/>
+          <path d="M10 30v5a4 4 0 0 0 4 4h20a4 4 0 0 0 4-4v-5"/>
+        </svg>
+        <span class="drop-title">Drop an MRI slice here</span>
+        <span class="drop-sub">or click to choose a file, or paste an image · PNG, JPEG, BMP · up to 10 MB</span>
+      </label>
+
+      <div class="samples">
+        <div class="samples-head">
+          <h2>Try a scan from the held-out test set</h2>
+        </div>
+        <div class="sample-grid" id="samples">
+          <button class="sample" data-src="/static/samples/glioma.jpg" data-label="Glioma">
+            <img src="/static/samples/glioma.jpg" alt="" loading="lazy"><span>Glioma</span>
+          </button>
+          <button class="sample" data-src="/static/samples/meningioma.jpg" data-label="Meningioma">
+            <img src="/static/samples/meningioma.jpg" alt="" loading="lazy"><span>Meningioma</span>
+          </button>
+          <button class="sample" data-src="/static/samples/pituitary.jpg" data-label="Pituitary">
+            <img src="/static/samples/pituitary.jpg" alt="" loading="lazy"><span>Pituitary</span>
+          </button>
+          <button class="sample" data-src="/static/samples/no_tumor.jpg" data-label="No tumor">
+            <img src="/static/samples/no_tumor.jpg" alt="" loading="lazy"><span>No tumor</span>
+          </button>
+          <button class="sample sample-hard" data-src="/static/samples/hard_case.jpg" data-label="Glioma (hard case)">
+            <img src="/static/samples/hard_case.jpg" alt="" loading="lazy"><span>Hard case</span>
+          </button>
+        </div>
+      </div>
+
+      <p class="privacy">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2 4 4.5v5c0 4 2.6 7 6 8.5 3.4-1.5 6-4.5 6-8.5v-5Z"/></svg>
+        Images are processed in memory and never stored.
+      </p>
+    </section>
+
+    <section class="card result" aria-labelledby="result-title" aria-live="polite">
+      <h2 id="result-title" class="visually-hidden">Result</h2>
+
+      <div class="state state-empty" id="state-empty">
+        <div class="empty-art" aria-hidden="true"><span></span><span></span><span></span></div>
+        <p class="empty-title">No scan yet</p>
+        <p class="muted">Upload a slice or pick a sample to see the prediction, the model's confidence and where it looked.</p>
+      </div>
+
+      <div class="state state-loading" id="state-loading" hidden>
+        <div class="spinner" aria-hidden="true"></div>
+        <p class="muted">Running input checks, out-of-distribution test and classifier…</p>
+      </div>
+
+      <div class="state state-error" id="state-error" hidden>
+        <p class="error-title" id="error-title">Something went wrong</p>
+        <p class="muted" id="error-text"></p>
+      </div>
+
+      <div class="state state-result" id="state-result" hidden>
+        <div class="verdict" id="verdict">
+          <span class="chip" id="status-chip"></span>
+          <p class="verdict-label" id="verdict-label"></p>
+          <p class="verdict-text" id="verdict-text"></p>
+        </div>
+
+        <div class="viewer-wrap">
+          <figure class="viewer" id="viewer">
+            <img id="input-img" alt="The 224 × 224 image the model saw">
+            <img id="heat-img" class="heat" alt="">
+          </figure>
+          <div class="viewer-controls" id="viewer-controls">
+            <label class="switch">
+              <input type="checkbox" id="heat-toggle" checked>
+              <span class="track"><span class="thumb"></span></span>
+              Grad-CAM heatmap
+            </label>
+            <label class="range-label">
+              opacity
+              <input type="range" id="heat-opacity" min="0" max="100" value="80">
+            </label>
+          </div>
+          <p class="caption" id="viewer-caption">What the model saw (224 × 224). Warm colors mark the regions that drove the prediction.</p>
+        </div>
+
+        <div class="probs" id="probs-block">
+          <h3>Calibrated probabilities</h3>
+          <ul id="probs"></ul>
+        </div>
+
+        <dl class="facts">
+          <div><dt>Confidence</dt><dd id="fact-confidence">–</dd></div>
+          <div><dt>Distribution check</dt><dd id="fact-ood">–</dd></div>
+          <div><dt>Latency</dt><dd id="fact-latency">–</dd></div>
+          <div><dt>Model</dt><dd id="fact-version">–</dd></div>
+        </dl>
+        <div class="ood-meter" id="ood-meter" aria-hidden="true">
+          <div class="ood-fill" id="ood-fill"></div>
+          <div class="ood-mark" id="ood-mark"></div>
+        </div>
+        <p class="caption">Distance from the training MRIs (Mahalanobis score). Past the line, the model refuses to answer.</p>
+      </div>
+    </section>
+  </main>
+
+  <section class="how" aria-labelledby="how-title">
+    <h2 id="how-title">What happens to your image</h2>
+    <ol class="steps">
+      <li class="step">
+        <span class="step-n">1</span>
+        <h3>Input checks</h3>
+        <p>The file must decode as an image of sensible size, and be grayscale like an MRI. Color photos stop here.</p>
+      </li>
+      <li class="step">
+        <span class="step-n">2</span>
+        <h3>Out-of-distribution test</h3>
+        <p>The image's features are compared with the training MRIs. Too far from all of them, and the model refuses to guess.</p>
+        <p class="stat" id="stat-ood"></p>
+      </li>
+      <li class="step">
+        <span class="step-n">3</span>
+        <h3>Calibrated classifier</h3>
+        <p>EfficientNetB0 with temperature scaling, so "90%" means right about 9 times in 10. Low-confidence cases go to review.</p>
+        <p class="stat" id="stat-f1"></p>
+      </li>
+      <li class="step">
+        <span class="step-n">4</span>
+        <h3>Grad-CAM</h3>
+        <p>A heatmap of the regions that drove the decision. A sanity check, not an explanation a clinician can rely on.</p>
+      </li>
+    </ol>
+    <p class="fine" id="stat-line"></p>
+  </section>
+
+  <footer class="foot">
+    <p>
+      Trained on the <a href="https://www.kaggle.com/datasets/masoudnickparvar/brain-tumor-mri-dataset" rel="noopener noreferrer">Brain Tumor MRI Dataset</a>
+      (Masoud Nickparvar, CC BY 4.0), evaluated on a duplicate-aware split. Image-level evaluation on one public dataset:
+      performance on other scanners or hospitals is unknown.
+    </p>
+  </footer>
+</body>
+</html>
