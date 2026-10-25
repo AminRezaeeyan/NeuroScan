@@ -3805,8 +3805,6 @@ dependencies = [
 [package.optional-dependencies]
 serving = [
     { name = "fastapi" },
-    { name = "flask" },
-    { name = "gunicorn" },
     { name = "httpx" },
     { name = "python-multipart" },
     { name = "uvicorn", extra = ["standard"] },
@@ -3836,8 +3834,6 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "fastapi", marker = "extra == 'serving'", specifier = ">=0.115" },
-    { name = "flask", marker = "extra == 'serving'", specifier = ">=3.1" },
-    { name = "gunicorn", marker = "extra == 'serving'", specifier = ">=23.0" },
     { name = "httpx", marker = "extra == 'serving'", specifier = ">=0.28" },
     { name = "imagehash", specifier = ">=4.3" },
     { name = "kaggle", specifier = ">=1.7" },
