@@ -1,6 +1,9 @@
 # Performance
 
-All numbers on a laptop CPU (4 cores, no GPU), champion EfficientNetB0 (model v7).
+All numbers on a laptop CPU (4 cores, no GPU), measured on the first champion
+(EfficientNetB0, model v7). The current champion (v10) has the same architecture; its
+head cropping and intensity normalization add preprocessing work per upload that is not
+separately benchmarked here.
 
 ## Runtime and quantization (`python -m neuroscan.optimize --champion`)
 

@@ -44,8 +44,11 @@ optimistic.
   (champion: 10.5).
 - Resizing to 224x224 hides resolution and format from the model, but not brightness,
   contrast, framing or the blur of upscaled small images.
-- Planned: crop to the head and normalize intensity per image, then retrain and measure
-  whether the gap shrinks ([design.md](design.md#17-open-problems-and-next-steps)).
+- Cropping to the head and normalizing intensity per image, then retraining the champion,
+  cut its gap from +10.5 to +6.2 points on test (+4.4 to +1.1 on validation) at equal
+  accuracy. A probe on the model's input pixels still reaches 80% (84% without the
+  preprocessing): MRI sequence type and the blur of upscaled small images remain
+  ([design.md](design.md#18-reducing-the-source-shortcut)).
 
 ## Finding 2: Kaggle's Testing folder overlaps its Training folder
 

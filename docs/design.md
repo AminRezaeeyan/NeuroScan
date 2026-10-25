@@ -28,6 +28,7 @@ Contents
 15. [Testing and CI](#15-testing-and-ci)
 16. [What is deliberately not done](#16-what-is-deliberately-not-done)
 17. [Open problems and next steps](#17-open-problems-and-next-steps)
+18. [Reducing the source shortcut](#18-reducing-the-source-shortcut)
 
 ---
 
@@ -124,7 +125,7 @@ about 99% recall, because most "no tumor" images come from a different source (s
 often PNG, brighter) than the tumor classes (mostly 512x512 JPEG).
 
 **Decision.** Measure this shortcut in every evaluation (section 4.4), report it as a
-limitation, and try to reduce it in a dedicated retraining run (section 17).
+limitation, and reduce it with a dedicated retraining run (section 18).
 
 ### 3.4 Duplicate detection
 
@@ -409,11 +410,20 @@ any candidate was trained, and `python -m neuroscan.tracking.select` applies it 
    missing a tumor is the costliest error.
 4. Among the rest, take the lowest CPU latency; within 10%, the fewest parameters.
 
-**Outcome.** ResNet50 led on validation, but EfficientNetB0 and the baseline were tied
-with it. The baseline was dropped on sensitivity (98.6% versus 100%). EfficientNetB0 is
-three times faster and six times smaller than ResNet50 at equal sensitivity, so it became
-the **champion**. The registry aliases are `champion` (EfficientNetB0) and `baseline`
-(the retrained original architecture).
+**Outcome of the first comparison.** ResNet50 led on validation, but EfficientNetB0 and
+the baseline were tied with it. The baseline was dropped on sensitivity (98.6% versus
+100%). EfficientNetB0 is three times faster and six times smaller than ResNet50 at equal
+sensitivity, so it became the **champion**. The registry aliases are `champion` and
+`baseline` (the retrained original architecture).
+
+**Second comparison.** A fifth candidate, EfficientNetB0 retrained with shortcut-reduced
+preprocessing (section 18), was added as a separate candidate; the rule itself was not
+changed. It is tied with the leader and keeps tumor sensitivity, and the rule's final
+step chose it over the original EfficientNetB0 by CPU latency (18.0 versus 30.1 ms).
+**That last step is not meaningful here**: the two share the same architecture, so the
+latency difference is measurement noise between sessions. The decision is still sound
+for a substantive reason the rule does not encode: at equal accuracy, the new model leans
+much less on source cues. It became the champion (model version 10).
 
 **Why the rule matters more than the winner.** With overlapping intervals, any choice
 made after seeing test results could be tuned to them. A rule fixed in advance, using
@@ -434,12 +444,13 @@ softmax(logits / T). It never changes the predicted class.
 
 | Model | Temperature | Test ECE before → after | Test NLL before → after |
 | --- | ---: | ---: | ---: |
-| EfficientNetB0 (champion) | 2.02 | 0.024 → 0.011 | 0.138 → 0.111 |
+| EfficientNetB0, shortcut-reduced (champion) | 2.19 | 0.023 → 0.014 | 0.163 → 0.108 |
+| EfficientNetB0 (first champion) | 2.02 | 0.024 → 0.011 | 0.138 → 0.111 |
 | ResNet50 | 2.41 | 0.019 → 0.014 | 0.123 → 0.090 |
 | Baseline CNN | 2.39 | 0.031 → 0.023 | 0.178 → 0.138 |
 | CNN + GAP | 1.33 | 0.025 → 0.041 | 0.281 → 0.281 |
 
-Expected calibration error halves for the champion. For CNN + GAP it gets worse: that
+Expected calibration error drops by 40–55% for the EfficientNet models. For CNN + GAP it gets worse: that
 model was barely overconfident, and ECE on about 1,000 images is noisy; the result is
 reported as measured.
 
@@ -456,11 +467,14 @@ sanity check instead of hand-picked examples: how often the heatmap's peak, and 
 share of its mass, falls inside a simple brain mask (intensity threshold, largest
 connected component, holes filled).
 
-| Check (test split, 1,050 images) | Result | Chance level |
-| --- | ---: | ---: |
-| Heatmap peak inside the brain | 99.6% | 54% (mask area) |
-| Heatmap mass inside the brain | 85.8% | 54% |
-| Peak inside the brain, wrong predictions | 97.6% | |
+| Check (test split, 1,050 images) | First champion | Current champion | Chance level |
+| --- | ---: | ---: | ---: |
+| Heatmap peak inside the brain | 99.6% | 99.5% | 54% / 69% (mask area) |
+| Heatmap mass inside the brain | 85.8% | 89.3% | 54% / 69% |
+| Peak inside the brain, wrong predictions | 97.6% | 96.9% | |
+
+The chance level is higher for the current champion because its cropped inputs show
+more head and less background.
 
 In the example grid, correct predictions focus on the lesion, and **glioma/meningioma
 confusions still look at the tumor**: the model finds the lesion but misjudges its type.
@@ -506,6 +520,9 @@ unstable). An image's score is its smallest Mahalanobis distance to a class mean
 refused, a known and accepted cost. **No OOD image is used to choose it**; tuning it on
 the OOD test images would be the same mistake as training on the test set.
 
+The numbers below are for the first champion; the detector was refitted for the current
+champion with the same procedure (results at the end of this section).
+
 **Evaluation.** An OOD test set from public datasets, 300 images per source (188 for chest
 X-rays): natural photos, chest X-rays, CT slices and lumbar spine MRI (MRI, but the wrong
 anatomy). Maximum softmax probability (after temperature scaling) is the reference
@@ -541,10 +558,27 @@ predictions above it reaches 99%. On the test split, with all rules applied:
 | Flagged uncertain | 8.7% |
 | Accuracy on the answered rest | 98.8% (96.0% when answering everything) |
 
-### 10.6 One package
+### 10.6 Current champion
 
-The network, temperature, detector parameters and both thresholds are registered as one
-MLflow model version (v7, with alias `champion`). Moving the alias releases or rolls back
+Refitted on the shortcut-reduced champion (threshold 3,864.5, uncertain below 0.75):
+
+| Source | Refused | AUROC, Mahalanobis / max softmax |
+| --- | ---: | --- |
+| Natural photos | 100% | 1.000 / 0.988 |
+| Chest X-ray | 100% | 1.000 / 0.989 |
+| Spine MRI | 100% | 0.999 / 0.969 |
+| CT | 98.3% | 0.996 / 0.969 |
+| All | | 0.999 / 0.978 |
+
+On the test split it refuses 2.0% of real MRIs, flags 3.6% as uncertain and answers the
+rest with 98.2% accuracy. Cropping and normalization made CT slices easier to tell apart
+(98.3% refused instead of 94.3%), and the better-calibrated confidence needs a lower
+review threshold (0.75 instead of 0.86), so fewer scans go to review.
+
+### 10.7 One package
+
+The network, temperature, detector parameters, both thresholds and the preprocessing
+mode are registered as one MLflow model version (v10, alias `champion`). Moving the alias releases or rolls back
 all of them together.
 
 ---
@@ -687,13 +721,13 @@ training data.
 
 ## 15. Testing and CI
 
-84 tests run in CI; 8 behavioral tests run locally against the real champion.
+89 tests run in CI; 8 behavioral tests run locally against the real champion.
 
 | Area | What is checked |
 | --- | --- |
 | Data | Planted duplicates are found (exact, contrast-changed, re-encoded); distinct images are not grouped; no group crosses splits; the committed split's counts are pinned |
 | Preprocessing | Shape, dtype and range for grayscale, RGBA and odd sizes; non-images raise |
-| Train/serve parity | The training pipeline and the API produce identical tensors |
+| Train/serve parity | The training pipeline and the API produce identical tensors, in both preprocessing modes |
 | Models | Each builder's shapes, the GAP variant's size, which layers fine-tuning unfreezes, the exact ImageNet weight file each builder requests (without network) |
 | Training | A full run writes a complete bundle; resume after a simulated disconnect continues the same run; finalize after a lost session; commit change on resume is recorded |
 | Tracking | Import into a temporary MLflow store: params, metrics, tags, artifacts, registered version; re-import refused |
@@ -724,13 +758,90 @@ checks locally.
 
 ## 17. Open problems and next steps
 
-- **Reduce the source shortcut.** Crop each image to the head and normalize intensity per
-  image, so resolution, framing, brightness and contrast carry less information about the
-  source; re-run the metadata probe on the preprocessed images, retrain the champion
-  architecture on the same split, compare the shortcut gap before and after, and apply the
-  same selection rule again. ResNet50's smaller gap makes it a candidate to revisit.
+- **More of the shortcut.** The remaining cues (MRI sequence type, blur of upscaled small
+  images) cannot be removed by preprocessing; data from more sources per class would be
+  needed. ResNet50 with shortcut-reduced preprocessing is an untested combination.
 - **Train longer.** The pretrained models hit their epoch limit while improving.
 - **External validation.** Test on brain MRIs from another source to measure how the
   model and the OOD detector behave under a real distribution shift.
 - **Label noise.** 27 duplicate groups carry conflicting labels; a review of these would
   improve both training and the test set.
+
+---
+
+## 18. Reducing the source shortcut
+
+### 18.1 What was changed
+
+**Decision.** A second preprocessing mode, `shortcut_reduced`
+(`data.preprocessing` in the config), applied before resizing:
+
+1. **Crop to the head.** The bounding box of pixels brighter than 10% of the image
+   maximum (after a 5x5 blur, so stray text and noise don't count), plus a 4% margin.
+   Every head now fills the frame, removing differences in framing, head size and the
+   share of black background.
+2. **Normalize intensity per image.** The 1st to 99th intensity percentiles of the crop are
+   stretched to 0–255, removing differences in overall brightness and contrast.
+
+Both steps are pure TensorFlow in `data/preprocess.py`, so training, evaluation and the
+API run identical operations (the parity test covers both modes). The mode is stored in
+each run's config and in the packaged model, so a model is always served with the
+preprocessing it was trained with. The `standard` mode was verified to be bit-identical
+to before, so earlier models were unaffected.
+
+**Alternative considered:** a learned segmentation of the brain. Out of proportion for
+the problem: the background is nearly black, and a threshold finds the head reliably.
+
+**Cost:** narrow images are stretched to a square after cropping; this is consistent
+between training and serving.
+
+### 18.2 What the preprocessing can and cannot remove
+
+Before training, a probe measured how much class information simple statistics of the
+**model's input** carry (`python -m neuroscan.shortcut`: brightness, contrast,
+percentiles, background share, sharpness; 5-fold cross-validation on the training split,
+folds keeping duplicate groups together; chance 25%):
+
+| Model input | Pixel-probe accuracy | "No tumor" recall |
+| --- | ---: | ---: |
+| Standard | 83.8% | 92% |
+| Shortcut-reduced | 80.1% | 87% |
+
+Only part of the signal disappears. What remains is largely out of preprocessing's reach:
+the MRI sequence (many "no tumor" images are T2/FLAIR, the tumor classes mostly
+contrast-enhanced T1), the blur of small images upscaled to 224 px, and genuine anatomy
+(a large bright tumor does change image statistics). So the real test was the retrained
+model, not the probe.
+
+### 18.3 The retrained model
+
+`configs/efficientnet_b0_shortcut_reduced.yaml` is the champion's recipe with only the
+preprocessing changed: same split, seed, augmentation, schedule and two-stage
+fine-tuning. Trained on a Colab T4 in 36 minutes.
+
+| | EfficientNetB0 | EfficientNetB0, shortcut-reduced |
+| --- | ---: | ---: |
+| Validation macro F1 (groups once) | 0.964 (0.947–0.979) | 0.965 (0.948–0.979) |
+| Test macro F1 (groups once) | 0.955 (0.936–0.972) | 0.960 (0.942–0.976) |
+| Test tumor sensitivity | 99.0% | 99.6% |
+| **Shortcut gap, validation** | +4.4 pt | **+1.1 pt** |
+| **Shortcut gap, test** | +10.5 pt | **+6.2 pt** |
+| Meningioma test F1 | 0.925 | 0.940 |
+
+**The model leans markedly less on source cues, with no loss of accuracy.** The test gap
+does not vanish: as the probe predicted, cues that preprocessing cannot remove remain.
+ResNet50 (standard preprocessing) still has the smallest test gap (+4.5), which suggests
+architecture matters too.
+
+### 18.4 Promotion
+
+The selection rule chose the new model (section 7, including why its last tie-break step
+is not meaningful here). It was then calibrated (T = 2.19), given a refitted OOD detector
+(section 10.6) and Grad-CAM checks (section 9), and registered as model version 10 with
+the `champion` alias. Moving the alias was the whole release: the API and the Docker
+container pick it up on restart without code or image changes.
+
+The demo's "hard case" had to change: the new model answers the previous one (a glioma
+the first champion was unsure about) correctly at 94% confidence. The new hard case is a
+meningioma the current model is split on (51% glioma), the confusion that remains its
+main weakness.

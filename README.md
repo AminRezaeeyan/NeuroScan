@@ -35,12 +35,14 @@ and a service that refuses inputs it wasn't built for.
   EfficientNetB0 and ResNet50, trained on Colab, tracked in MLflow and compared with 95%
   confidence intervals. The champion was chosen on validation data by a rule committed
   before training.
-- **Calibrated, and able to say no.** Temperature scaling halves calibration error. A
-  Mahalanobis detector refuses photos, X-rays, CT and spine MRI (AUROC 0.998), and
-  low-confidence cases are sent to review: the answered 89% of test scans are 98.8%
+- **Calibrated, and able to say no.** Temperature scaling cuts calibration error by 40%. A
+  Mahalanobis detector refuses photos, X-rays, CT and spine MRI (AUROC 0.999), and
+  low-confidence cases are sent to review: the answered 94% of test scans are 98.2%
   accurate.
-- **Measured shortcuts.** File and acquisition properties alone predict the class 79% of
-  the time. Every evaluation reports how much each model leans on such cues.
+- **Measured and reduced shortcuts.** File and acquisition properties alone predict the
+  class 79% of the time. Every evaluation reports how much a model leans on such cues;
+  retraining with head cropping and per-image intensity normalization **cut the
+  champion's shortcut gap from 10.5 to 6.2 points without losing accuracy**.
 - **Served safely.** FastAPI service and a single-page demo, loaded from the MLflow
   registry by alias, with in-memory uploads, strict security headers and a hardened,
   read-only Docker container.
@@ -55,28 +57,34 @@ counted once**.
 | --- | ---: | --- | ---: | ---: | ---: |
 | Baseline CNN (original architecture) | 9.7M | 0.954 (0.933–0.972) | 99.0% | +10.9 pt | 12.5 ms |
 | CNN + global average pooling | 0.26M | 0.879 (0.847–0.906) | 97.3% | +22.6 pt | 10.0 ms |
-| **EfficientNetB0 (champion)** | 4.1M | 0.955 (0.936–0.972) | 99.0% | +10.5 pt | 30.1 ms |
+| EfficientNetB0 | 4.1M | 0.955 (0.936–0.972) | 99.0% | +10.5 pt | 30.1 ms* |
+| **EfficientNetB0, shortcut-reduced (champion)** | 4.1M | **0.960 (0.942–0.976)** | **99.6%** | **+6.2 pt** | 18.0 ms* |
 | ResNet50 | 23.6M | 0.967 (0.952–0.981) | 99.8% | +4.5 pt | 90.7 ms |
 
 *Shortcut gap: how much more accurate a model is on images whose class can be guessed
-from metadata alone. Smaller is better.*
+from metadata alone. Smaller is better. \*Same architecture; the latency difference is
+measurement noise between sessions.*
 
-- EfficientNetB0, ResNet50 and the baseline are statistically tied (overlapping
-  intervals). The [selection rule](docs/model_selection.md) then keeps tumor sensitivity
-  within 1 point and prefers the faster model: EfficientNetB0 is 3x faster and 6x smaller
-  than ResNet50.
-- With the refusal rules on, the served model refuses 2.2% of real test MRIs as out of
-  distribution, sends 8.7% to review as uncertain, and answers the rest with **98.8%
+- The shortcut-reduced EfficientNetB0 is the original EfficientNetB0 recipe with one
+  change: each image is cropped to the head and its intensity normalized before resizing.
+  It is as accurate as before and leans much less on image-source cues (validation gap
+  +1.1 instead of +4.4 points, test +6.2 instead of +10.5).
+- Three models are statistically tied with the leader, ResNet50 (overlapping intervals). The
+  [selection rule](docs/model_selection.md), fixed before training, keeps tumor
+  sensitivity within 1 point and prefers the faster, then smaller model. The champion is
+  3x faster and 6x smaller than ResNet50.
+- With the refusal rules on, the served model refuses 2.0% of real test MRIs as out of
+  distribution, sends 3.6% to review as uncertain, and answers the rest with **98.2%
   accuracy**.
 
 ![Model comparison](docs/figures/model_comparison.png)
 
 | Refusing inputs | Refused | AUROC, Mahalanobis / max softmax |
 | --- | ---: | --- |
-| Natural photos | 100% | 1.000 / 0.965 |
-| Chest X-ray | 100% | 1.000 / 0.961 |
-| Lumbar spine MRI | 100% | 0.999 / 0.866 |
-| CT slices | 94.3% | 0.994 / 0.947 |
+| Natural photos | 100% | 1.000 / 0.988 |
+| Chest X-ray | 100% | 1.000 / 0.989 |
+| Lumbar spine MRI | 100% | 0.999 / 0.969 |
+| CT slices | 98.3% | 0.996 / 0.969 |
 
 More: [results](docs/results.md) (all tables and figures, generated from MLflow),
 [data audit](docs/data_audit.md), [model card](docs/model_card.md),
@@ -109,7 +117,7 @@ For each uploaded image the service returns one of four statuses:
 | Status | When |
 | --- | --- |
 | `ok` | In distribution and confident: class + calibrated probabilities + Grad-CAM |
-| `uncertain` | In distribution, calibrated confidence below 0.86: sent to review |
+| `uncertain` | In distribution, calibrated confidence below 0.75: sent to review |
 | `rejected_ood` | Features far from every training class (Mahalanobis distance) |
 | `rejected_input` | Not a plausible MRI file: undecodable, odd size, or a color image |
 
@@ -137,15 +145,15 @@ curl -F "file=@scan.jpg" http://127.0.0.1:8000/v1/predict
 
 ```json
 {
-  "model_version": "7",
+  "model_version": "10",
   "status": "ok",
   "prediction": "meningioma",
-  "confidence": 0.998,
-  "probabilities": {"glioma": 0.001, "meningioma": 0.998, "notumor": 0.0, "pituitary": 0.001},
+  "confidence": 0.992,
+  "probabilities": {"glioma": 0.005, "meningioma": 0.992, "notumor": 0.0, "pituitary": 0.002},
   "calibrated": true,
-  "ood_score": 2093.1,
-  "ood_threshold": 3918.3,
-  "latency_ms": 74.2,
+  "ood_score": 2371.5,
+  "ood_threshold": 3864.5,
+  "latency_ms": "…",
   "input_png_base64": "…",
   "heatmap_png_base64": "…",
   "disclaimer": "Research demo, not a medical device. Do not use for diagnosis."
@@ -176,6 +184,7 @@ src/neuroscan/
   calibrate.py         temperature scaling
   explain.py           Grad-CAM + brain-mask check
   ood.py               Mahalanobis detector and thresholds
+  shortcut.py          pixel-statistics probe of the model input, per preprocessing mode
   optimize.py          TFLite export and benchmark
   tracking/            run-bundle import, legacy model, model selection
   serving/             FastAPI app, demo page, input checks, packaged model, monitoring
@@ -190,7 +199,7 @@ docs/                  design, data audit, model card, results, performance, rep
 ## Testing and CI
 
 ```bash
-make ci                 # ruff, mypy, bandit, pytest (84 tests)
+make ci                 # ruff, mypy, bandit, pytest (89 tests)
 make test-behavioral    # 8 tests against the real champion (needs the local registry)
 ```
 
@@ -206,15 +215,16 @@ uploads, path-traversal file names, security headers).
   different slices of one patient can sit in different splits. Performance on other
   scanners or hospitals is unknown.
 - **Source shortcuts.** Image source partly reveals the class (a metadata-only probe
-  reaches 79%), and every model leans on it to some degree. Tumor-versus-no-tumor
-  results in particular are likely optimistic.
+  reaches 79%). Head cropping and intensity normalization reduced the champion's reliance
+  on it, but cues such as MRI sequence type and the blur of upscaled small images remain:
+  a probe on the champion's input pixels still reaches 80%. Tumor-versus-no-tumor results
+  in particular are likely optimistic.
 - **"Out of distribution" means unlike the training data**, not "not a brain MRI".
   Real brain MRIs framed differently can be refused, and some CT slices are accepted.
 - **2D slices only**, four classes, and some label noise between glioma and meningioma.
 - **Grad-CAM** shows where the model looked, not why.
 
-Planned: reduce the source shortcut with head cropping and per-image intensity
-normalization, then retrain and compare ([design.md](docs/design.md#17-open-problems-and-next-steps)).
+How the shortcut was reduced, and what remains: [design.md](docs/design.md#18-reducing-the-source-shortcut).
 
 ## Data and license
 
