@@ -103,3 +103,9 @@ def test_committed_split_is_clean():
     check_split(split)
     assert not split["path"].str.contains("-aug-").any()
     assert set(split["label"]) == set(CLASS_NAMES)
+    # Pinned counts: changing the split silently would invalidate every tracked result.
+    counts = pd.crosstab(split["split"], split["label"])
+    for name in ("glioma", "notumor", "pituitary"):
+        assert counts[name].to_dict() == {"test": 270, "train": 1260, "val": 270}
+    assert counts["meningioma"].to_dict() == {"test": 240, "train": 1117, "val": 240}
+    assert split["group"].nunique() == 3891
