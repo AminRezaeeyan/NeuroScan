@@ -173,7 +173,7 @@ def main() -> None:
     from neuroscan.calibrate import PROB_COLUMNS
     from neuroscan.data.datasets import load_split
     from neuroscan.data.preprocess import preprocess_file
-    from neuroscan.tracking import REGISTERED_MODEL, get_client
+    from neuroscan.tracking import REGISTERED_MODEL, get_client, run_preprocessing
 
     client = get_client()
     run_id = args.run_id
@@ -183,7 +183,8 @@ def main() -> None:
 
     split = load_split(args.split_csv)
     test = split[split["split"] == "test"].reset_index(drop=True)
-    images = np.stack([preprocess_file(args.raw_dir / p) for p in test["path"]])
+    mode = run_preprocessing(client, run_id)
+    images = np.stack([preprocess_file(args.raw_dir / p, mode=mode) for p in test["path"]])
     labels = test["label_idx"].to_numpy()
 
     with tempfile.TemporaryDirectory() as tmp:

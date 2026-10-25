@@ -62,3 +62,37 @@ def test_make_dataset_batches(raw_dir):
         x, y = next(iter(make_dataset(df, raw_dir, cfg, training=training)))
         assert x.shape == (4, 224, 224, 3)
         assert y.dtype.name == "int32"
+
+
+def _encode_png(arr):
+    buf = io.BytesIO()
+    Image.fromarray(arr).save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def test_shortcut_reduced_crops_to_the_head_and_normalizes():
+    from neuroscan.data.preprocess import preprocess_bytes
+
+    canvas = np.zeros((300, 300), np.uint8)
+    canvas[100:200, 120:180] = 60  # a dim "head" in a large black frame
+    canvas[140:160, 140:160] = 90  # a brighter "lesion"
+    out = preprocess_bytes(_encode_png(canvas), 64, mode="shortcut_reduced")
+    gray = out.mean(axis=-1)
+    assert gray[6:-6, 6:-6].min() > 100  # the head fills the frame (small margin aside)
+    assert (gray > 100).mean() > 0.7
+    assert out.max() == pytest.approx(255, abs=1)  # intensity stretched to the full range
+    assert out.shape == (64, 64, 3)
+
+
+def test_shortcut_reduced_keeps_blank_images_safe():
+    from neuroscan.data.preprocess import preprocess_bytes
+
+    out = preprocess_bytes(_encode_png(np.zeros((80, 80), np.uint8)), 32, mode="shortcut_reduced")
+    assert np.isfinite(out).all() and out.max() == 0
+
+
+def test_unknown_preprocessing_mode():
+    from neuroscan.data.preprocess import preprocess_bytes
+
+    with pytest.raises(ValueError, match="Unknown preprocessing"):
+        preprocess_bytes(_encode_png(np.zeros((80, 80), np.uint8)), 32, mode="fancy")

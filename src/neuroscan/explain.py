@@ -112,13 +112,17 @@ def heatmap_stats(cam: np.ndarray, mask: np.ndarray) -> dict[str, float]:
 
 
 def explain(
-    model: keras.Model, preds: pd.DataFrame, raw_dir: Path, batch_size: int = 32
+    model: keras.Model,
+    preds: pd.DataFrame,
+    raw_dir: Path,
+    batch_size: int = 32,
+    mode: str = "standard",
 ) -> tuple[pd.DataFrame, dict[str, np.ndarray]]:
     """Per-image heatmap stats for ``preds`` (evaluation predictions) and the heatmaps."""
     rows, cams = [], {}
     for start in range(0, len(preds), batch_size):
         part = preds.iloc[start : start + batch_size]
-        images = np.stack([preprocess_file(raw_dir / p) for p in part["path"]])
+        images = np.stack([preprocess_file(raw_dir / p, mode=mode) for p in part["path"]])
         heat, _ = gradcam(model, images)
         for (_, row), image, cam in zip(part.iterrows(), images, heat, strict=True):
             stats = heatmap_stats(cam, brain_mask(image))
@@ -170,7 +174,7 @@ def main() -> None:
 
     import neuroscan.models  # noqa: F401
     from neuroscan.reports.plots import gradcam_grid
-    from neuroscan.tracking import REGISTERED_MODEL, get_client
+    from neuroscan.tracking import REGISTERED_MODEL, get_client, run_preprocessing
 
     client = get_client()
     run_id = args.run_id
@@ -181,13 +185,14 @@ def main() -> None:
         path = client.download_artifacts(run_id, f"evaluation/{args.eval_set}/predictions.csv", tmp)
         preds = pd.read_csv(path)
 
-    stats, cams = explain(model, preds, args.raw_dir)
+    mode = run_preprocessing(client, run_id)
+    stats, cams = explain(model, preds, args.raw_dir, mode=mode)
     summary = summarize(stats)
     prefix = f"explain.{args.eval_set}"
     for key, value in summary.items():
         client.log_metric(run_id, f"{prefix}.{key}", value)
     examples = pick_examples(stats)
-    images = {p: preprocess_file(args.raw_dir / p) for p in examples["path"]}
+    images = {p: preprocess_file(args.raw_dir / p, mode=mode) for p in examples["path"]}
     fig = gradcam_grid(examples, images, cams)
     client.log_figure(run_id, fig, f"explain/{args.eval_set}/gradcam_grid.png")
     with tempfile.TemporaryDirectory() as tmp:

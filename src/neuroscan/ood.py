@@ -81,18 +81,22 @@ def list_images(folder: Path) -> list[Path]:
     return sorted(p for p in folder.rglob("*") if p.suffix.lower() in IMAGE_SUFFIXES)
 
 
-def load_images(paths: list[Path], size: int, batch_size: int = 32) -> tf.data.Dataset:
+def load_images(
+    paths: list[Path], size: int, mode: str = "standard", batch_size: int = 32
+) -> tf.data.Dataset:
     ds = tf.data.Dataset.from_tensor_slices([str(p) for p in paths])
-    ds = ds.map(lambda p: decode_and_resize(tf.io.read_file(p), size), tf.data.AUTOTUNE)
+    ds = ds.map(lambda p: decode_and_resize(tf.io.read_file(p), size, mode), tf.data.AUTOTUNE)
     return ds.batch(batch_size).prefetch(tf.data.AUTOTUNE)
 
 
-def extract(model: keras.Model, paths: list[Path]) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def extract(
+    model: keras.Model, paths: list[Path], mode: str = "standard"
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """(features, probabilities, input-check rejected flags) for image files."""
     fm = feature_model(model)
     size = int(model.input_shape[1])
     feats, probs, rejected = [], [], []
-    for batch in load_images(paths, size):
+    for batch in load_images(paths, size, mode):
         f, p = fm(batch, training=False)
         feats.append(np.asarray(f))
         probs.append(np.asarray(p))
@@ -150,7 +154,7 @@ def main() -> None:
     import neuroscan.models  # noqa: F401
     from neuroscan.data.datasets import load_split
     from neuroscan.reports.plots import ood_histogram
-    from neuroscan.tracking import REGISTERED_MODEL, get_client
+    from neuroscan.tracking import REGISTERED_MODEL, get_client, run_preprocessing
 
     client = get_client()
     run_id = args.run_id
@@ -161,13 +165,14 @@ def main() -> None:
     if temperature is None:
         raise SystemExit("Calibrate this run first: python -m neuroscan.calibrate --run-id ...")
     model = mlflow.keras.load_model(f"runs:/{run_id}/model")
+    mode = run_preprocessing(client, run_id)
 
     split = load_split(args.split_csv)
     data: dict[str, tuple[np.ndarray, np.ndarray, np.ndarray]] = {}
     labels: dict[str, np.ndarray] = {}
     for name in ("train", "val", "test"):
         part = split[split["split"] == name]
-        data[name] = extract(model, [args.raw_dir / p for p in part["path"]])
+        data[name] = extract(model, [args.raw_dir / p for p in part["path"]], mode)
         labels[name] = part["label_idx"].to_numpy()
         print(f"{name}: {len(part)} MRIs")
     sources = (
@@ -176,7 +181,7 @@ def main() -> None:
         else []
     )
     for source in sources:
-        data[f"ood/{source}"] = extract(model, list_images(args.ood_dir / source))
+        data[f"ood/{source}"] = extract(model, list_images(args.ood_dir / source), mode)
         print(f"ood/{source}: {len(data[f'ood/{source}'][0])} images")
     if not sources:
         print(f"No OOD images in {args.ood_dir}: fitting and thresholds only")

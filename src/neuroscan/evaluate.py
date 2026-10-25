@@ -234,11 +234,13 @@ def evaluate(
     metadata_cache: Path | None = Path("data/cache/metadata.csv"),
     with_shortcut: bool = True,
     with_latency: bool = True,
+    preprocessing: str = "standard",
 ) -> EvalReport:
     df = select_eval_set(split, eval_set).reset_index(drop=True)
     cfg = Config()
     cfg.data.image_size = model.input_shape[1]
     cfg.data.batch_size = batch_size
+    cfg.data.preprocessing = preprocessing
     probs = model.predict(make_dataset(df, raw_dir, cfg, training=False), verbose=0)
     preds = df[["path", "label", "label_idx", "group", "kaggle_split", "split"]].assign(
         pred_idx=probs.argmax(axis=1),
@@ -327,10 +329,11 @@ def main() -> None:
     import mlflow
 
     import neuroscan.models  # noqa: F401 - registers custom layers
-    from neuroscan.tracking import get_client
+    from neuroscan.tracking import get_client, run_preprocessing
 
     get_client()
     model = mlflow.keras.load_model(f"runs:/{args.run_id}/model")
+    preprocessing = run_preprocessing(get_client(), args.run_id)
     if args.latency_only:
         latency = cpu_latency_ms(model)
         client = get_client()
@@ -341,7 +344,7 @@ def main() -> None:
         return
     split = load_split(args.split_csv)
     for eval_set in args.eval_set:
-        report = evaluate(model, split, args.raw_dir, eval_set)
+        report = evaluate(model, split, args.raw_dir, eval_set, preprocessing=preprocessing)
         log_report(args.run_id, report)
         print_report(report)
 

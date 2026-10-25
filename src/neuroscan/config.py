@@ -20,6 +20,9 @@ class DataConfig:
     image_size: int = 224
     batch_size: int = 32
     seed: int = 42
+    # "standard" (decode + resize) or "shortcut_reduced" (head crop + intensity
+    # normalization first); see neuroscan.data.preprocess.
+    preprocessing: str = "standard"
 
 
 @dataclass

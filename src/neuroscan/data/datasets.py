@@ -11,7 +11,7 @@ import tensorflow as tf
 
 from neuroscan.config import CLASS_NAMES, AugmentConfig, Config
 from neuroscan.data.download import SPLITS, list_images
-from neuroscan.data.preprocess import decode_and_resize
+from neuroscan.data.preprocess import check_mode, decode_and_resize
 
 
 def scan_raw(raw_dir: str | Path) -> pd.DataFrame:
@@ -76,10 +76,11 @@ def make_dataset(
     paths = [str(Path(raw_dir) / p) for p in df["path"]]
     labels = df["label_idx"].to_numpy(dtype=np.int32)
     size = cfg.data.image_size
+    mode = check_mode(cfg.data.preprocessing)
 
     ds = tf.data.Dataset.from_tensor_slices((paths, labels))
     ds = ds.map(
-        lambda p, y: (decode_and_resize(tf.io.read_file(p), size), y),
+        lambda p, y: (decode_and_resize(tf.io.read_file(p), size, mode), y),
         num_parallel_calls=tf.data.AUTOTUNE,
     )
     if cache:

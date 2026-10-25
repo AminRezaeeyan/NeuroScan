@@ -88,6 +88,10 @@ class ServedModel:
         return int(self.config["image_size"])
 
     @property
+    def preprocessing(self) -> str:
+        return str(self.config.get("preprocessing", "standard"))
+
+    @property
     def ood_threshold(self) -> float | None:
         det = getattr(self.predictor, "detector", None)
         return None if det is None else float(det.threshold)
@@ -274,7 +278,9 @@ def create_app(loader: Callable[[str], ServedModel] = load_from_registry) -> Fas
 
         # CPU-bound work runs in a worker thread so the event loop keeps serving
         # (health checks, other requests) during inference.
-        image = (await run_in_threadpool(preprocess_bytes, data, model.image_size))[None]
+        image = (
+            await run_in_threadpool(preprocess_bytes, data, model.image_size, model.preprocessing)
+        )[None]
         result = (await run_in_threadpool(predict_images, model, image, heatmap))[0]
         latency = (time.perf_counter() - start) * 1000
         metrics.record(model.version, result, latency)
@@ -310,7 +316,9 @@ def create_app(loader: Callable[[str], ServedModel] = load_from_registry) -> Fas
             if check_bytes(data) in ("not_an_image", "bad_size"):
                 raise HTTPException(400, detail="not_an_image")
         images = await run_in_threadpool(
-            lambda: np.stack([preprocess_bytes(d, model.image_size) for d in payloads])
+            lambda: np.stack(
+                [preprocess_bytes(d, model.image_size, model.preprocessing) for d in payloads]
+            )
         )
         results = await run_in_threadpool(predict_images, model, images, False)
         latency = (time.perf_counter() - start) * 1000

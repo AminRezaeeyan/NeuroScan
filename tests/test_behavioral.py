@@ -32,13 +32,14 @@ def champion():
 
 
 @pytest.fixture(scope="module")
-def test_images():
+def test_images(champion):
     from neuroscan.data.datasets import load_split
     from neuroscan.data.preprocess import preprocess_file
 
     split = load_split(ROOT / "splits/v1.csv")
     picked = split[split["split"] == "test"].groupby("label").sample(12, random_state=0)
-    images = np.stack([preprocess_file(ROOT / "data/raw" / p) for p in picked["path"]])
+    mode = champion.unwrap_python_model().config.get("preprocessing", "standard")
+    images = np.stack([preprocess_file(ROOT / "data/raw" / p, mode=mode) for p in picked["path"]])
     return picked.reset_index(drop=True), images
 
 
@@ -53,7 +54,8 @@ def test_demo_samples_keep_their_answers(champion):
         "hard_case.jpg": ("uncertain", None),
     }
     names = list(expected)
-    out = champion.predict(np.stack([preprocess_file(SAMPLES / n) for n in names]))
+    mode = champion.unwrap_python_model().config.get("preprocessing", "standard")
+    out = champion.predict(np.stack([preprocess_file(SAMPLES / n, mode=mode) for n in names]))
     for name, (_, row) in zip(names, out.iterrows(), strict=True):
         status, label = expected[name]
         assert row["status"] == status, name
@@ -87,6 +89,7 @@ def test_out_of_distribution_images_are_refused(champion, source):
     if not folder.is_dir():
         pytest.skip(f"no {folder} (make ood-data)")
     paths = sorted(folder.iterdir())[:20]
-    out = champion.predict(np.stack([preprocess_file(p) for p in paths]))
+    mode = champion.unwrap_python_model().config.get("preprocessing", "standard")
+    out = champion.predict(np.stack([preprocess_file(p, mode=mode) for p in paths]))
     refused = out["status"].isin(["rejected_ood", "rejected_input"]).mean()
     assert refused >= (0.85 if source == "ct" else 0.95), pd.Series(out["status"]).value_counts()

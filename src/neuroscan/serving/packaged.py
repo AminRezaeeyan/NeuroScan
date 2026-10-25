@@ -98,10 +98,12 @@ def serving_config(
     image_size: int,
     source_version: str | None,
     uncertain_threshold: float = 0.0,
+    preprocessing: str = "standard",
 ) -> dict:
     return {
         "class_names": list(CLASS_NAMES),
         "image_size": image_size,
+        "preprocessing": preprocessing,
         "temperature": temperature,
         "uncertain_threshold": uncertain_threshold,
         "source_model_version": source_version,
@@ -129,7 +131,8 @@ def register_packaged_model(
     source_version = min((str(v.version) for v in source), key=int, default=None)
     model = mlflow.keras.load_model(f"runs:/{run_id}/model")
     size = int(model.input_shape[1])
-    config = serving_config(temperature, size, source_version, uncertain_threshold)
+    preprocessing = run.data.params.get("data.preprocessing", "standard")
+    config = serving_config(temperature, size, source_version, uncertain_threshold, preprocessing)
     detector = None
     if ood_path is not None:
         from neuroscan.ood import MahalanobisDetector

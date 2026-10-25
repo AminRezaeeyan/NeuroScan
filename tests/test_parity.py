@@ -29,12 +29,14 @@ def files(tmp_path):
     return tmp_path, pd.DataFrame(rows)
 
 
-def test_training_pipeline_and_api_produce_identical_tensors(files):
+@pytest.mark.parametrize("mode", ["standard", "shortcut_reduced"])
+def test_training_pipeline_and_api_produce_identical_tensors(files, mode):
     """The API preprocesses uploads with preprocess_bytes; training uses make_dataset."""
     root, df = files
     cfg = Config()
     cfg.data.batch_size = len(df)
+    cfg.data.preprocessing = mode
     batch, _ = next(iter(make_dataset(df, root, cfg, training=False)))
     for i, name in enumerate(df["path"]):
-        served = preprocess_bytes((root / name).read_bytes(), cfg.data.image_size)
+        served = preprocess_bytes((root / name).read_bytes(), cfg.data.image_size, mode)
         np.testing.assert_array_equal(batch[i].numpy(), served, err_msg=name)

@@ -19,6 +19,11 @@ DEFAULT_ARTIFACT_ROOT = "mlartifacts"
 os.environ.setdefault("MLFLOW_DISABLE_AGENT_HINT", "1")
 
 
+def run_preprocessing(client: Any, run_id: str) -> str:
+    """The preprocessing mode a run was trained with ("standard" for older runs)."""
+    return str(client.get_run(run_id).data.params.get("data.preprocessing", "standard"))
+
+
 def get_client(tracking_uri: str | None = None, artifact_root: str | Path | None = None) -> Any:
     """Point MLflow at the local store and make sure the experiment exists."""
     import mlflow
