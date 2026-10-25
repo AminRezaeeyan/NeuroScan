@@ -37,6 +37,7 @@ LABELS = {
     "cnn_gap": "CNN + GAP",
     "efficientnet_b0": "EfficientNetB0",
     "resnet50": "ResNet50",
+    "efficientnet_b0+shortcut_reduced": "EfficientNetB0, shortcut-reduced",
 }
 CHAMPION_ARTIFACTS = {
     "figures/learning_curves.png": "champion_learning_curves.png",

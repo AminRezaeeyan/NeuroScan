@@ -96,13 +96,16 @@ def load_candidates(client: Any) -> pd.DataFrame:
     rows = {}
     for run in runs:
         model = run.data.tags.get("model")
-        if model in CANDIDATE_MODELS and model not in rows:  # latest run per model
+        preprocessing = run.data.params.get("data.preprocessing", "standard")
+        name = model if preprocessing == "standard" else f"{model}+{preprocessing}"
+        # Latest run per architecture and preprocessing.
+        if model in CANDIDATE_MODELS and name not in rows:
             metrics = run.data.metrics
             row: dict[str, Any] = {"run_id": run.info.run_id, "run_name": run.info.run_name}
             row["params"] = int(run.data.params.get("result.params", 0))
             for col, key in {**SELECTION_METRICS, **REPORT_METRICS}.items():
                 row[col] = metrics.get(key)
-            rows[model] = row
+            rows[name] = row
     df = pd.DataFrame.from_dict(rows, orient="index")
     if df.empty:
         raise LookupError("No finished, non-dry-run candidate runs in MLflow")

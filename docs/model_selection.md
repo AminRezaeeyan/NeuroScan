@@ -18,6 +18,13 @@ The four architectures, each trained once with its config in `configs/` on the s
 
 For each model, the latest finished run that is not a dry run is used.
 
+**Addition (after the first comparison, before any shortcut-reduced model was trained).**
+A run trained with different preprocessing is a separate candidate, named
+`<model>+<preprocessing>`; the first is `efficientnet_b0+shortcut_reduced`
+(`configs/efficientnet_b0_shortcut_reduced.yaml`: the champion's recipe with head
+cropping and per-image intensity normalization). The rule below is unchanged and is
+applied to all candidates together.
+
 ## Rule
 
 Only **validation** metrics are used. Test metrics are reported, never used to choose.

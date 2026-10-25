@@ -1,4 +1,4 @@
-.PHONY: install lint typecheck test mlflow data dedup split import eval select calibrate explain ood-data ood figures serve docker-build docker-up docker-down security test-behavioral ci optimize loadtest colab-package
+.PHONY: install lint typecheck test mlflow data dedup split import eval select calibrate explain ood-data ood figures serve docker-build docker-up docker-down security test-behavioral ci optimize loadtest shortcut colab-package
 
 install:
 	uv sync --all-extras
@@ -82,6 +82,10 @@ docker-up: docker-build
 
 docker-down:
 	docker compose down
+
+# How much class information simple pixel statistics carry, per preprocessing mode
+shortcut:
+	uv run python -m neuroscan.shortcut
 
 # TFLite export and runtime benchmark of the champion (logged into its run)
 optimize:
