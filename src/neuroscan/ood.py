@@ -84,9 +84,11 @@ def list_images(folder: Path) -> list[Path]:
 def load_images(
     paths: list[Path], size: int, mode: str = "standard", batch_size: int = 32
 ) -> tf.data.Dataset:
+    # Bounded parallelism and prefetch: decoding full-size images with unbounded
+    # AUTOTUNE buffers used several GB on small machines.
     ds = tf.data.Dataset.from_tensor_slices([str(p) for p in paths])
-    ds = ds.map(lambda p: decode_and_resize(tf.io.read_file(p), size, mode), tf.data.AUTOTUNE)
-    return ds.batch(batch_size).prefetch(tf.data.AUTOTUNE)
+    ds = ds.map(lambda p: decode_and_resize(tf.io.read_file(p), size, mode), num_parallel_calls=2)
+    return ds.batch(batch_size).prefetch(1)
 
 
 def extract(
@@ -94,10 +96,11 @@ def extract(
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """(features, probabilities, input-check rejected flags) for image files."""
     fm = feature_model(model)
+    run = tf.function(lambda x: fm(x, training=False), reduce_retracing=True)
     size = int(model.input_shape[1])
     feats, probs, rejected = [], [], []
     for batch in load_images(paths, size, mode):
-        f, p = fm(batch, training=False)
+        f, p = run(batch)
         feats.append(np.asarray(f))
         probs.append(np.asarray(p))
         rejected += [check_array(img) is not None for img in batch.numpy()]
