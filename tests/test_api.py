@@ -103,3 +103,19 @@ def test_not_ready_when_model_fails(monkeypatch):
         assert c.get("/ready").status_code == 503
         r = c.post("/v1/predict", files={"file": ("a.png", GRAY, "image/png")})
         assert r.status_code == 503 and r.json()["error"] == "model_not_loaded"
+
+
+def test_metrics_and_outcome_log(served, monkeypatch, tmp_path):
+    import json
+
+    log = tmp_path / "predictions.jsonl"
+    monkeypatch.setenv("NEUROSCAN_PREDICTION_LOG", str(log))
+    with TestClient(create_app(loader=lambda uri: served)) as c:
+        c.post("/v1/predict", files={"file": ("a.png", GRAY, "image/png")})
+        c.post("/v1/predict", files={"file": ("b.jpg", PHOTO, "image/jpeg")})
+        text = c.get("/metrics").text
+    assert 'status="rejected_input",prediction="none"} 1' in text
+    assert "neuroscan_request_latency_ms_count 2" in text
+    entries = [json.loads(line) for line in log.read_text().splitlines()]
+    assert [e["status"] for e in entries][1] == "rejected_input"
+    assert all("image" not in key and "file" not in key for e in entries for key in e)

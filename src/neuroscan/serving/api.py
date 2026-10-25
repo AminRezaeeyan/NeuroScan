@@ -8,7 +8,10 @@ how a model is released or rolled back. Configuration comes from the environment
 
 - ``NEUROSCAN_MODEL_URI``: model to serve (default: the champion alias);
 - ``MLFLOW_TRACKING_URI``: where the registry lives;
-- ``NEUROSCAN_MAX_UPLOAD_MB``: upload limit (default 10).
+- ``NEUROSCAN_MAX_UPLOAD_MB``: upload limit (default 10);
+- ``NEUROSCAN_PREDICTION_LOG``: optional JSON-lines file of prediction outcomes.
+
+``/metrics`` exposes prediction counts, latency and confidence in Prometheus format.
 
 Uploads are processed in memory and never stored; logs record the outcome
 (status, class, confidence, latency, model version), never the image.
@@ -31,11 +34,13 @@ from typing import Annotated, Any
 
 import numpy as np
 from fastapi import FastAPI, File, HTTPException, Query, Request, UploadFile
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from PIL import Image
 
 from neuroscan.serving.checks import check_bytes
+from neuroscan.serving.monitoring import Metrics
 from neuroscan.serving.schemas import BatchPrediction, Error, ModelInfo, Prediction
 
 log = logging.getLogger("neuroscan.api")
@@ -181,6 +186,7 @@ def create_app(loader: Callable[[str], ServedModel] = load_from_registry) -> Fas
     model_uri = os.environ.get("NEUROSCAN_MODEL_URI", DEFAULT_MODEL_URI)
     max_bytes = int(float(os.environ.get("NEUROSCAN_MAX_UPLOAD_MB", "10")) * 1024 * 1024)
     state: dict[str, ServedModel | None] = {"model": None}
+    metrics = Metrics(os.environ.get("NEUROSCAN_PREDICTION_LOG") or None)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
@@ -223,6 +229,10 @@ def create_app(loader: Callable[[str], ServedModel] = load_from_registry) -> Fas
         log.exception("Unhandled error")  # details in the logs only
         return JSONResponse(Error(error="internal_error").model_dump(), status_code=500)
 
+    @app.get("/metrics", include_in_schema=False)
+    def prometheus_metrics() -> PlainTextResponse:
+        return PlainTextResponse(metrics.render(), media_type="text/plain; version=0.0.4")
+
     @app.get("/health")
     def health() -> dict[str, str]:
         return {"status": "ok"}
@@ -262,9 +272,12 @@ def create_app(loader: Callable[[str], ServedModel] = load_from_registry) -> Fas
             raise HTTPException(400, detail=problem)
         from neuroscan.data.preprocess import preprocess_bytes
 
-        image = preprocess_bytes(data, model.image_size)[None]
-        result = predict_images(model, image, heatmap)[0]
+        # CPU-bound work runs in a worker thread so the event loop keeps serving
+        # (health checks, other requests) during inference.
+        image = (await run_in_threadpool(preprocess_bytes, data, model.image_size))[None]
+        result = (await run_in_threadpool(predict_images, model, image, heatmap))[0]
         latency = (time.perf_counter() - start) * 1000
+        metrics.record(model.version, result, latency)
         log.info(
             "predict status=%s class=%s confidence=%s version=%s latency_ms=%.0f",
             result["status"],
@@ -296,9 +309,13 @@ def create_app(loader: Callable[[str], ServedModel] = load_from_registry) -> Fas
         for data in payloads:
             if check_bytes(data) in ("not_an_image", "bad_size"):
                 raise HTTPException(400, detail="not_an_image")
-        images = np.stack([preprocess_bytes(d, model.image_size) for d in payloads])
-        results = predict_images(model, images, with_heatmap=False)
+        images = await run_in_threadpool(
+            lambda: np.stack([preprocess_bytes(d, model.image_size) for d in payloads])
+        )
+        results = await run_in_threadpool(predict_images, model, images, False)
         latency = (time.perf_counter() - start) * 1000
+        for r in results:
+            metrics.record(model.version, r, latency / len(results))
         for r in results:
             r.pop("input_png_base64", None)
         return BatchPrediction(
