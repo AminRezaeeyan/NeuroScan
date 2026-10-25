@@ -1,4 +1,4 @@
-.PHONY: install lint typecheck test mlflow data dedup split import eval select calibrate explain ood-data ood figures serve docker-build docker-up docker-down security test-behavioral ci colab-package
+.PHONY: install lint typecheck test mlflow data dedup split import eval select calibrate explain ood-data ood figures serve docker-build docker-up docker-down security test-behavioral ci optimize loadtest colab-package
 
 install:
 	uv sync --all-extras
@@ -82,6 +82,14 @@ docker-up: docker-build
 
 docker-down:
 	docker compose down
+
+# TFLite export and runtime benchmark of the champion (logged into its run)
+optimize:
+	uv run python -m neuroscan.optimize --champion
+
+# Load test a running API (start it first with make serve)
+loadtest:
+	uv run python -m neuroscan.serving.loadtest --url http://127.0.0.1:8000 --concurrency 1 2 4
 
 # Static security scan of the package
 security:
