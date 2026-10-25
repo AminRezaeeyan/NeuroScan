@@ -41,7 +41,7 @@ def image_metadata(path: Path) -> dict[str, Any]:
         "img_format": fmt,
         "color_mode": mode,
         "file_kb": len(data) / 1024,
-        "md5": hashlib.md5(data, usedforsecurity=False).hexdigest(),  # nosec B324
+        "md5": hashlib.md5(data, usedforsecurity=False).hexdigest(),
         "max_channel_diff": int(np.abs(arr - arr[..., :1]).max()),
         "mean_intensity": float(gray.mean()),
         "std_intensity": float(gray.std()),

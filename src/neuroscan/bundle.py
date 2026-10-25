@@ -15,7 +15,9 @@ import hashlib
 import json
 import platform
 import shutil
-import subprocess  # nosec B404 - fixed git command, no user input
+
+# subprocess only runs git with fixed arguments (no user input).
+import subprocess  # nosec B404
 import time
 from pathlib import Path
 from typing import Any
@@ -43,7 +45,7 @@ def _git(*args: str) -> str:
     if git is None:
         raise OSError("git not found")
     here = Path(__file__).resolve().parent
-    out = subprocess.run(  # noqa: S603  # nosec B603 - fixed arguments, no user input
+    out = subprocess.run(  # noqa: S603  # nosec B603
         [git, "-C", str(here), *args], capture_output=True, text=True, check=True
     )
     return out.stdout.strip()

@@ -1,4 +1,4 @@
-.PHONY: install lint typecheck test mlflow data dedup split import eval select calibrate explain ood-data ood figures colab-package
+.PHONY: install lint typecheck test mlflow data dedup split import eval select calibrate explain ood-data ood figures serve docker-build docker-up docker-down security colab-package
 
 install:
 	uv sync --all-extras
@@ -56,6 +56,25 @@ ood-data:
 # Fit the OOD detector on the champion, evaluate it, package and move @champion to it
 ood:
 	uv run python -m neuroscan.ood --champion --register
+
+# Run the API and demo page locally on http://127.0.0.1:8000 (serves @champion)
+serve:
+	uv run uvicorn neuroscan.serving.api:app --host 127.0.0.1 --port 8000
+
+# Same, in Docker (read-only container, registry mounted read-only)
+docker-build:
+	docker compose build
+
+docker-up:
+	docker compose up -d --build
+	@echo "NeuroScan on http://127.0.0.1:8000 (model loads in ~30 s; check: docker compose ps)"
+
+docker-down:
+	docker compose down
+
+# Static security scan of the package
+security:
+	uv run bandit -q -r src -c pyproject.toml
 
 # Export README figures and docs/results.md from MLflow
 figures:

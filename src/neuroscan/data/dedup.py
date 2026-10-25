@@ -41,7 +41,7 @@ def image_signature(path: Path) -> tuple[str, int, np.ndarray]:
     with Image.open(path) as img:
         gray = img.convert("L")
     pixels = np.asarray(gray)
-    digest = hashlib.md5(  # nosec B324 - duplicate detection, not security
+    digest = hashlib.md5(
         pixels.tobytes() + str(pixels.shape).encode(), usedforsecurity=False
     ).hexdigest()
     phash = int(str(imagehash.phash(gray)), 16)

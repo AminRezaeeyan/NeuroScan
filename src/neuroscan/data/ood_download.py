@@ -37,7 +37,8 @@ def candidate_images(root: Path, exclude: tuple[str, ...]) -> list[Path]:
 
 def sample_into(files: list[Path], dest: Path, n: int, seed: int) -> int:
     dest.mkdir(parents=True, exist_ok=True)
-    chosen = random.Random(seed).sample(files, min(n, len(files)))  # noqa: S311 - sampling
+    # Seeded sampling of images, not security.
+    chosen = random.Random(seed).sample(files, min(n, len(files)))  # noqa: S311  # nosec B311
     for i, src in enumerate(chosen):
         shutil.copy(src, dest / f"{i:04d}{src.suffix.lower()}")
     return len(chosen)
