@@ -12,6 +12,17 @@ and a service that refuses inputs it wasn't built for.
 > **Research demo, not a medical device.** NeuroScan must not be used for diagnosis or
 > any decision about a patient.
 
+> **Project history.** The foundation of NeuroScan (the CNN architecture, its training
+> recipe and the first web app) was built in February–March 2025 and released as
+> [v1.0.0](https://github.com/AminRezaeeyan/NeuroScan/releases/tag/v1.0.0) (2 March 2025)
+> and [v1.1.0](https://github.com/AminRezaeeyan/NeuroScan/releases/tag/v1.1.0)
+> (23 March 2025). In October 2026, about a year and a half later, I revisited it and
+> re-engineered it into the system described here: an audited dataset and leakage-free
+> evaluation, tracked experiments, a pre-registered model comparison, calibration,
+> out-of-distribution refusal, a secured API and tests with CI. The original model is kept
+> as a reference and [re-evaluated below](#the-original-model-measured-honestly); its code
+> remains available under the v1 tags.
+
 ![NeuroScan demo page](docs/figures/ui_dark.png)
 
 ## Highlights
