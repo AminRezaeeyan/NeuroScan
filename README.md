@@ -1,248 +1,214 @@
-# 🧠 NeuroScan - Brain Tumor Classifier
+# NeuroScan
 
-![Kaggle](https://img.shields.io/badge/Kaggle-Notebook-blue?logo=kaggle&link=https://www.kaggle.com/code/aminrezaeeyan/brain-tumor-classification-using-cnn-98-32)
-![Accuracy](https://img.shields.io/badge/accuracy-98.32%25-brightgreen)
-![PyPI - Python Version](https://img.shields.io/badge/python-3.9%2B-blue?logo=python)
-![TensorFlow](https://img.shields.io/badge/TensorFlow-2.18.1-orange?logo=tensorflow)
-![Keras](https://img.shields.io/badge/Keras-3.0-red?logo=keras)
-![Flask](https://img.shields.io/badge/Flask-3.0-lightgrey?logo=flask)
-![Docker](https://img.shields.io/badge/Docker-ready-blue?logo=docker)
-![License](https://img.shields.io/badge/license-MIT-green)
-![GitHub last commit](https://img.shields.io/github/last-commit/AminRezaeeyan/NeuroScan?color=blue&logo=github)
+[![CI](https://github.com/AminRezaeeyan/NeuroScan/actions/workflows/ci.yml/badge.svg)](https://github.com/AminRezaeeyan/NeuroScan/actions/workflows/ci.yml)
+![Python 3.12](https://img.shields.io/badge/python-3.12-blue)
+![License: MIT](https://img.shields.io/badge/license-MIT-green)
 
-<details>
-<summary><strong>📌 Table of Contents</strong></summary>
+Brain tumor classification from 2D MRI slices (glioma, meningioma, pituitary tumor, no
+tumor), built to produce numbers that hold up to scrutiny: a duplicate-aware evaluation,
+tracked experiments, a model chosen by a rule fixed in advance, calibrated probabilities,
+and a service that refuses inputs it wasn't built for.
 
-- [Model Overview](#-model-overview)
-- [Key Features](#-key-features)
-- [Web Interface](#-web-interface)
-- [Installation](#-installation)
-  - [Manual Setup](#manual-installation)
-  - [Docker Setup](#docker-installation)
-- [Usage](#-usage)
-- [Performance Metrics](#-performance-metrics)
-- [Future Work](#-future-work)
-- [Contributing](#-contributions)
-- [License](#-license)
-- [Acknowledgments](#-acknowledgments)
+> **Research demo, not a medical device.** NeuroScan must not be used for diagnosis or
+> any decision about a patient.
 
-</details>
+![NeuroScan demo page](docs/figures/ui_dark.png)
 
----
+## Highlights
 
-## 🧩 Model Overview
+- **An honest test set.** 55% of the dataset's own test images have a near-duplicate in
+  its training images. NeuroScan detects duplicates (including contrast-altered copies)
+  and builds a split where no duplicate group crosses train, validation and test.
+  The original model's 98.3% becomes 88.0% on test images it hasn't effectively seen.
+- **Four models, one pre-registered rule.** A baseline CNN, a lighter variant,
+  EfficientNetB0 and ResNet50, trained on Colab, tracked in MLflow and compared with 95%
+  confidence intervals. The champion was chosen on validation data by a rule committed
+  before training.
+- **Calibrated, and able to say no.** Temperature scaling halves calibration error. A
+  Mahalanobis detector refuses photos, X-rays, CT and spine MRI (AUROC 0.998), and
+  low-confidence cases are sent to review: the answered 89% of test scans are 98.8%
+  accurate.
+- **Measured shortcuts.** File and acquisition properties alone predict the class 79% of
+  the time. Every evaluation reports how much each model leans on such cues.
+- **Served safely.** FastAPI service and a single-page demo, loaded from the MLflow
+  registry by alias, with in-memory uploads, strict security headers and a hardened,
+  read-only Docker container.
 
-A powerful CNN model that classifies brain tumors into four categories with **98.32% accuracy**:
+## Results
 
-1. **Glioma** - Irregular tumors originating from glial cells
-2. **Meningioma** - Well-defined tumors of the meninges
-3. **Pituitary** - Hormone-affecting glandular tumors
-4. **No-tumor** - Healthy brain scans
+All four models were trained with the same split, seed and augmentation, and are
+evaluated on the same 1,050 held-out test images, with **each group of near-duplicates
+counted once**.
 
-<div align="center">
-  <img src="docs/images/samples.png" width="100%">
-</div>
+| Model | Params | Test macro F1 (95% CI) | Tumor sensitivity | Shortcut gap | CPU latency |
+| --- | ---: | --- | ---: | ---: | ---: |
+| Baseline CNN (original architecture) | 9.7M | 0.954 (0.933–0.972) | 99.0% | +10.9 pt | 12.5 ms |
+| CNN + global average pooling | 0.26M | 0.879 (0.847–0.906) | 97.3% | +22.6 pt | 10.0 ms |
+| **EfficientNetB0 (champion)** | 4.1M | 0.955 (0.936–0.972) | 99.0% | +10.5 pt | 30.1 ms |
+| ResNet50 | 23.6M | 0.967 (0.952–0.981) | 99.8% | +4.5 pt | 90.7 ms |
 
----
+*Shortcut gap: how much more accurate a model is on images whose class can be guessed
+from metadata alone. Smaller is better.*
 
-## 🚀 Key Features
+- EfficientNetB0, ResNet50 and the baseline are statistically tied (overlapping
+  intervals). The [selection rule](docs/model_selection.md) then keeps tumor sensitivity
+  within 1 point and prefers the faster model: EfficientNetB0 is 3x faster and 6x smaller
+  than ResNet50.
+- With the refusal rules on, the served model refuses 2.2% of real test MRIs as out of
+  distribution, sends 8.7% to review as uncertain, and answers the rest with **98.8%
+  accuracy**.
 
-- **98.32% Test Accuracy** - State-of-the-art performance
-- **VGG-Inspired Architecture** - Optimized 3x3 kernel design
-- **Advanced Training**:
-  - Early stopping & model checkpointing
-  - Dynamic learning rate scheduling
-  - Real-time data augmentation (rotations/flips)
-- **Production-Ready**:
-  - Flask web interface
-  - Docker container support
-  - REST API endpoints
+![Model comparison](docs/figures/model_comparison.png)
 
-<div align="center">
-  <img src="docs/images/architecture1.svg" width="100%">
-  <img src="docs/images/learning_curve.png" width="100%">
-</div>
+| Refusing inputs | Refused | AUROC, Mahalanobis / max softmax |
+| --- | ---: | --- |
+| Natural photos | 100% | 1.000 / 0.965 |
+| Chest X-ray | 100% | 1.000 / 0.961 |
+| Lumbar spine MRI | 100% | 0.999 / 0.866 |
+| CT slices | 94.3% | 0.994 / 0.947 |
 
----
+More: [results](docs/results.md) (all tables and figures, generated from MLflow),
+[data audit](docs/data_audit.md), [model card](docs/model_card.md),
+[performance](docs/performance.md).
 
-## 🌐 Web Interface
+### The original model, measured honestly
 
-<div align="center" style="display: flex; justify-content: center; align-items: center; flex-wrap: wrap; gap: 10px;">
-  <img src="docs/images/webui1.png" style="height: 350px; width: auto; object-fit: contain; flex: 1 1 auto; max-width: 30%; min-width: 250px;">
-  <img src="docs/images/webui2.png" style="height: 350px; width: auto; object-fit: contain; flex: 1 1 auto; max-width: 30%; min-width: 250px;">
-  <img src="docs/images/webui3.png" style="height: 350px; width: auto; object-fit: contain; flex: 1 1 auto; max-width: 30%; min-width: 250px;">
-</div>
+| Evaluation set | Accuracy (95% CI) | Macro F1 |
+| --- | --- | --- |
+| Published claim (earlier dataset version) | 98.3% | |
+| Kaggle `Testing`, current version | 94.1% (92.9–95.2) | 0.939 |
+| Kaggle `Testing` images with no duplicate in `Training` | **88.0% (85.3–90.5)** | **0.801** |
 
-**Features**:
-- Drag-and-drop MRI upload
-- Real-time visualization
-- Detailed confidence reports
-- Mobile-responsive design
+## How it works
 
----
-
-## 📥 Installation
-
-### Manual Installation
-``` bash
-# Clone repository
-git clone https://github.com/AminRezaeeyan/NeuroScan.git
-cd NeuroScan
-
-# Create and activate virtual environment (recommended)
-python -m venv venv
-source venv/bin/activate  # Linux/Mac
-# venv\Scripts\activate  # Windows
-
-# Install dependencies
-pip install --upgrade pip
-pip install -r requirements.txt
-
-# Run development server
-flask run --host=0.0.0.0 --port=5000
-```
-### Docker Installation
-``` bash
-# Clone repository
-git clone https://github.com/AminRezaeeyan/NeuroScan.git
-cd NeuroScan
-
-# Build and run containers (detached mode)
-docker-compose up -d --build
-
-# View logs (optional)
-docker-compose logs -f
-
+```mermaid
+flowchart LR
+    A[Kaggle dataset] --> B[Duplicate audit<br/>pixels, pHash, rank correlation]
+    B --> C[Fixed group-aware split<br/>splits/v1.csv]
+    C --> D[Train on Colab<br/>run bundle on Drive]
+    D --> E[Import into local MLflow]
+    E --> F[Evaluate<br/>intervals, sensitivity, shortcut check]
+    F --> G[Pre-registered selection<br/>@champion]
+    G --> H[Calibrate + OOD detector<br/>one packaged model]
+    H --> I[FastAPI + demo page<br/>Docker]
 ```
 
----
+For each uploaded image the service returns one of four statuses:
 
-## 💻 Usage
+| Status | When |
+| --- | --- |
+| `ok` | In distribution and confident: class + calibrated probabilities + Grad-CAM |
+| `uncertain` | In distribution, calibrated confidence below 0.86: sent to review |
+| `rejected_ood` | Features far from every training class (Mahalanobis distance) |
+| `rejected_input` | Not a plausible MRI file: undecodable, odd size, or a color image |
 
-### Programmatic API
+Every decision and its alternatives are explained in **[docs/design.md](docs/design.md)**.
 
-The pre-trained model (`best_model.keras`) is available in the `models/` directory and can be integrated into your applications:
+## Quick start
 
-```python
-from PIL import Image
-import numpy as np
-from tensorflow.keras.models import load_model
+The trained model is not stored in git: it lives in a local MLflow registry. Running the
+demo therefore needs the registry, which [docs/reproducing.md](docs/reproducing.md)
+builds from scratch (training takes about four Colab sessions).
 
-# Load the pre-trained model
-model = load_model('models/best_model.keras')
-
-def predict_tumor(image_path):
-    """
-    Predicts tumor class from MRI image
-    Args:
-        image_path: Path to MRI image (JPEG/PNG)
-    Returns:
-        dict: {'class': 'glioma/meningioma/pituitary/notumor',
-              'confidence': float,
-              'probabilities': dict}
-    """
-    # Load and preprocess image using Pillow
-    img = Image.open(image_path)
-    img = img.resize((224, 224))  # Resize to 224x224
-    img = img.convert('RGB')  # Ensure RGB format
-    img_array = np.expand_dims(img_array, axis=0)  # Add batch dimension
-
-    # Make prediction
-    pred = model.predict(img_array)
-    classes = ['Glioma', 'Meningioma', 'No Tumor', 'Pituitary']
-
-    return {
-        'class': classes[np.argmax(pred)],
-        'confidence': float(np.max(pred)),
-        'probabilities': {cls: float(prob) for cls, prob in zip(classes, pred[0])}
-    }
-
-# Example usage
-result = predict_tumor("path/to/mri.jpg")
-print(result)
+```bash
+make install            # Python 3.12 + uv; installs everything and the git hooks
+make data               # download the dataset (Kaggle token in ~/.kaggle/access_token)
+make mlflow             # browse experiments on http://127.0.0.1:5000
+make serve              # API + demo page on http://127.0.0.1:8000 (needs @champion)
+make docker-up          # same, in a hardened container
 ```
 
-Sample Output:
+### API
+
+```bash
+curl -F "file=@scan.jpg" http://127.0.0.1:8000/v1/predict
 ```
+
+```json
 {
-    'class': 'Meningioma',
-    'confidence': 0.9743,
-    'probabilities': {
-        'Glioma': 0.0121,
-        'Meningioma': 0.9743,
-        'Pituitary': 0.0087,
-        'No Tumor': 0.0049
-    }
+  "model_version": "7",
+  "status": "ok",
+  "prediction": "meningioma",
+  "confidence": 0.998,
+  "probabilities": {"glioma": 0.001, "meningioma": 0.998, "notumor": 0.0, "pituitary": 0.001},
+  "calibrated": true,
+  "ood_score": 2093.1,
+  "ood_threshold": 3918.3,
+  "latency_ms": 74.2,
+  "input_png_base64": "…",
+  "heatmap_png_base64": "…",
+  "disclaimer": "Research demo, not a medical device. Do not use for diagnosis."
 }
 ```
 
-⚠️ **Important Note:**
-The model automatically normalizes input images in its first layer. Do not manually normalize (divide by 255) as this will cause incorrect predictions. Simply pass the raw image array (0-255 values).
+| Endpoint | |
+| --- | --- |
+| `POST /v1/predict` | One image (`?heatmap=false` skips Grad-CAM) |
+| `POST /v1/predict/batch` | Up to 16 images |
+| `GET /v1/info` | Served model version, thresholds, headline metrics |
+| `GET /health`, `GET /ready` | Liveness and readiness |
+| `GET /metrics` | Prometheus metrics |
+| `GET /docs` | Interactive API documentation |
 
----
+Errors return `{"error": "<code>"}`: `not_an_image` / `bad_size` (400), `file_too_large`
+(413), `model_not_loaded` (503).
 
-## 📊 Performance Metrics
+## Repository layout
 
-| Metric        | Score  |
-| ------------- | ------ |
-| Accuracy      | 98.32% |
-| Precision     | 98.32% |
-| Recall        | 98.32% |
-| F1 Score      | 98.32% |
+```text
+src/neuroscan/
+  config.py            YAML configs -> dataclasses
+  data/                download, duplicate audit, splits, preprocessing, metadata probe
+  models/              one builder per model
+  train.py             config-driven training -> run bundle (resumable)
+  evaluate.py          metrics, cluster-bootstrap intervals, shortcut check
+  calibrate.py         temperature scaling
+  explain.py           Grad-CAM + brain-mask check
+  ood.py               Mahalanobis detector and thresholds
+  optimize.py          TFLite export and benchmark
+  tracking/            run-bundle import, legacy model, model selection
+  serving/             FastAPI app, demo page, input checks, packaged model, monitoring
+  reports/             figures and dashboards
+configs/               one YAML per model
+splits/v1.csv          the fixed split (committed)
+notebooks/             data exploration, Colab training notebook
+tests/                 unit, integration, API and behavioral tests
+docs/                  design, data audit, model card, results, performance, reproducing
+```
 
-<details>
-<summary><b>Class-wise Breakdown</b></summary>
+## Testing and CI
 
-| Class          | Precision | Recall | F1 Score |
-| -------------- | --------- | ------ | -------- |
-| Glioma         | 98.99%    | 98.33% | 98.66%   |
-| Meningioma     | 97.67%    | 96.08% | 96.87%   |
-| Pituitary      | 98.66%    | 98.33% | 98.50%   |
-| No-tumor       | 98.06%    | 100%   | 99.02%   |
+```bash
+make ci                 # ruff, mypy, bandit, pytest (84 tests)
+make test-behavioral    # 8 tests against the real champion (needs the local registry)
+```
 
-</details>
+GitHub Actions runs lint, type checks, the security scan, a notebook-output check and the
+test suite on every pull request, and builds the Docker image. Tests cover duplicate
+detection, split integrity, train/serve parity, training resume, MLflow import,
+calibration, OOD rejection, and API security cases (renamed text files, oversized
+uploads, path-traversal file names, security headers).
 
----
+## Limitations
 
-## 🔮 Future Work
+- **Image-level evaluation on one public dataset.** The dataset has no patient IDs, so
+  different slices of one patient can sit in different splits. Performance on other
+  scanners or hospitals is unknown.
+- **Source shortcuts.** Image source partly reveals the class (a metadata-only probe
+  reaches 79%), and every model leans on it to some degree. Tumor-versus-no-tumor
+  results in particular are likely optimistic.
+- **"Out of distribution" means unlike the training data**, not "not a brain MRI".
+  Real brain MRIs framed differently can be refused, and some CT slices are accepted.
+- **2D slices only**, four classes, and some label noise between glioma and meningioma.
+- **Grad-CAM** shows where the model looked, not why.
 
-- **Continuous Accuracy Improvements**: Currently targeting 99%+ through:
-  - Advanced attention mechanisms
-  - Transformer-based hybrid architectures
-  - Improved data augmentation pipelines
+Planned: reduce the source shortcut with head cropping and per-image intensity
+normalization, then retrain and compare ([design.md](docs/design.md#17-open-problems-and-next-steps)).
 
-- **Tumor Segmentation**: Developing pixel-level detection
+## Data and license
 
-- **Clinical Integration**:
-  - DICOM/PACS support
-  - HL7/FHIR compatibility
-  - Multi-modal analysis (MRI + CT)
+Dataset: [Brain Tumor MRI Dataset](https://www.kaggle.com/datasets/masoudnickparvar/brain-tumor-mri-dataset)
+by Masoud Nickparvar (CC BY 4.0). The five demo images in
+`src/neuroscan/serving/static/samples/` come from its held-out test split.
 
-- **Edge Deployment**:
-  - ONNX runtime optimization
-
----
-
-## 🤝 Contributions
-
-### How to Contribute:
-###
-1. Fork the repository
-2. Create your feature branch (git checkout -b feature/AmazingFeature)
-3. Commit your changes (git commit -m 'Add some AmazingFeature')
-4. Push to the branch (git push origin feature/AmazingFeature)
-5. Open a Pull Request
-###
-
-### Priority Areas:
-- Improved model interpretability
-- Additional medical imaging formats (DICOM, NIfTI)
-- Performance optimizations
-- UI/UX enhancements
-- Documentation improvements
-
----
-
-## 📜 License
-
-Distributed under the MIT License. See `LICENSE` for more information.
+Code: MIT License, see [LICENSE](LICENSE). Author: Amin Rezaeeyan.
