@@ -55,7 +55,15 @@ class NeuroScanModel(PythonModel):
         from neuroscan.ood import feature_model
 
         self.model, self.config, self.detector = model, config, detector
-        self.features = feature_model(model) if detector is not None else None
+        self.features = None
+        if detector is not None:
+            import tensorflow as tf
+
+            # Compiled graph: calling the Keras model eagerly is ~10x slower per image.
+            features = feature_model(model)
+            self.features = tf.function(
+                lambda x: features(x, training=False), reduce_retracing=True
+            )
 
     def predict(self, context, model_input, params=None):
         # No annotations: MLflow validates input against annotated predict() signatures.
@@ -63,7 +71,7 @@ class NeuroScanModel(PythonModel):
 
         x = np.asarray(model_input, dtype=np.float32)
         if self.features is not None:
-            feats, raw = (np.asarray(t) for t in self.features(x, training=False))
+            feats, raw = (np.asarray(t) for t in self.features(x))
             ood_score = self.detector.score(feats)
             ood = ood_score > self.detector.threshold
         else:

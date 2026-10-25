@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import tempfile
 from pathlib import Path
+from typing import Any
 
 import keras
 import numpy as np
@@ -40,31 +41,50 @@ def target_layer_index(model: keras.Model) -> int:
     raise ValueError("No convolutional layer or backbone found")
 
 
+_GRADCAM_FNS: dict[int, Any] = {}
+
+
+def _gradcam_graph(model: keras.Model) -> Any:
+    """Compiled Grad-CAM for ``model``: images -> (raw heatmaps, predicted class).
+
+    Compiled once per model; running the layers eagerly is ~10x slower.
+    """
+    key = id(model)
+    if key not in _GRADCAM_FNS:
+        target = model.layers[target_layer_index(model)]
+        layers = model.layers[1:]  # skip the InputLayer
+        dense = layers[-1]
+
+        @tf.function(reduce_retracing=True)
+        def run(x: tf.Tensor) -> tuple[tf.Tensor, tf.Tensor]:
+            features = None
+            with tf.GradientTape() as tape:
+                h = x
+                for layer in layers[:-1]:
+                    h = layer(h, training=False)
+                    if layer is target:
+                        features = h
+                        tape.watch(features)
+                logits = tf.matmul(h, dense.kernel) + dense.bias
+                pred = tf.argmax(logits, axis=1)
+                score = tf.gather(logits, pred, axis=1, batch_dims=1)
+            grads = tape.gradient(score, features)
+            weights = tf.reduce_mean(grads, axis=(1, 2), keepdims=True)
+            cam = tf.nn.relu(tf.reduce_sum(weights * features, axis=-1))[..., None]
+            return tf.image.resize(cam, tf.shape(x)[1:3], method="bilinear")[..., 0], pred
+
+        _GRADCAM_FNS[key] = run
+    return _GRADCAM_FNS[key]
+
+
 def gradcam(model: keras.Model, images: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """(heatmaps in [0, 1] at input resolution, predicted class per image).
 
     Assumes a sequential chain of layers (true for all NeuroScan models) whose last
     layer is a softmax Dense; its pre-activation output is the class score.
     """
-    target = target_layer_index(model)
-    layers = model.layers[1:]  # skip the InputLayer
-    dense = layers[-1]
-    x = tf.convert_to_tensor(images, dtype=tf.float32)
-    features = None
-    with tf.GradientTape() as tape:
-        h = x
-        for layer in layers[:-1]:
-            h = layer(h, training=False)
-            if layer is model.layers[target]:
-                features = h
-                tape.watch(features)
-        logits = tf.matmul(h, dense.kernel) + dense.bias
-        pred = tf.argmax(logits, axis=1)
-        score = tf.gather(logits, pred, axis=1, batch_dims=1)
-    grads = tape.gradient(score, features)
-    weights = tf.reduce_mean(grads, axis=(1, 2), keepdims=True)
-    cam = tf.nn.relu(tf.reduce_sum(weights * features, axis=-1))[..., None]
-    cam = tf.image.resize(cam, images.shape[1:3], method="bilinear")[..., 0].numpy()
+    cam, pred = _gradcam_graph(model)(tf.convert_to_tensor(images, dtype=tf.float32))
+    cam = cam.numpy()
     peak = cam.reshape(len(cam), -1).max(axis=1)[:, None, None]
     return cam / np.maximum(peak, 1e-8), pred.numpy()
 
