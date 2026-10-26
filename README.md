@@ -1,6 +1,6 @@
 # NeuroScan
 
-[![CI](https://github.com/AminRezaeeyan/NeuroScan/actions/workflows/ci.yml/badge.svg?branch=upgrade/mlops-overhaul)](https://github.com/AminRezaeeyan/NeuroScan/actions/workflows/ci.yml)
+[![CI](https://github.com/AminRezaeeyan/NeuroScan/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/AminRezaeeyan/NeuroScan/actions/workflows/ci.yml)
 ![Python 3.12](https://img.shields.io/badge/python-3.12-blue)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
 
