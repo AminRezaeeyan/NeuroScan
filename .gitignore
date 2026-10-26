@@ -20,6 +20,7 @@ data/cache/
 data/legacy/
 data/manual_samples/
 data/ood/
+data/external/
 
 # Model files live in the MLflow registry, not in git
 *.keras

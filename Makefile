@@ -1,4 +1,4 @@
-.PHONY: install lint typecheck test mlflow data dedup split import eval select calibrate explain ood-data ood figures serve docker-build docker-up docker-down security test-behavioral ci optimize loadtest shortcut colab-package
+.PHONY: install lint typecheck test mlflow data dedup split import eval select calibrate explain ood-data ood figures serve docker-build docker-up docker-down security test-behavioral ci optimize loadtest shortcut external-data external-eval colab-package
 
 install:
 	uv sync --all-extras
@@ -86,6 +86,14 @@ docker-down:
 # How much class information simple pixel statistics carry, per preprocessing mode
 shortcut:
 	uv run python -m neuroscan.shortcut
+
+# External test set: PMRAM (hospitals in Bangladesh), 1,600 original images (~168 MB)
+external-data:
+	uv run python -m neuroscan.data.external --out data/external/pmram
+
+# Evaluate the current and first champion on it (overlap with training data excluded)
+external-eval:
+	uv run python -m neuroscan.evaluate_external
 
 # TFLite export and runtime benchmark of the champion (logged into its run)
 optimize:
