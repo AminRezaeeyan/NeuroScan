@@ -43,6 +43,10 @@ and a service that refuses inputs it wasn't built for.
   class 79% of the time. Every evaluation reports how much a model leans on such cues;
   retraining with head cropping and per-image intensity normalization **cut the
   champion's shortcut gap from 10.5 to 6.2 points without losing accuracy**.
+- **Tested on scans from other hospitals.** On 614 new images from Bangladeshi hospitals
+  (PMRAM, after removing the 59% that duplicate images in the training dataset), the
+  champion keeps **96.7% accuracy** (the previous champion: 91.9%) and answers 85% of
+  scans at 98.8% accuracy.
 - **Served safely.** FastAPI service and a single-page demo, loaded from the MLflow
   registry by alias, with in-memory uploads, strict security headers and a hardened,
   read-only Docker container.
@@ -85,6 +89,24 @@ measurement noise between sessions.*
 | Chest X-ray | 100% | 1.000 / 0.989 |
 | Lumbar spine MRI | 100% | 0.999 / 0.969 |
 | CT slices | 98.3% | 0.996 / 0.969 |
+
+### External test: scans from other hospitals
+
+[PMRAM](https://www.kaggle.com/datasets/orvile/pmram-bangladeshi-brain-cancer-mri-dataset)
+(CC BY-SA 4.0) collects brain MRIs from hospitals in Bangladesh. Of its 1,505 original
+images, **891 (59%) turned out to be copies of images in the public training dataset**,
+including every pituitary image, so they were excluded with the same duplicate detector
+used for the split. The remaining 614 images (glioma, meningioma, no tumor) are new to
+every model.
+
+| Model | Accuracy, forced to answer (95% CI) | Refused | Uncertain | Accuracy when answered |
+| --- | --- | ---: | ---: | ---: |
+| **EfficientNetB0, shortcut-reduced (champion)** | **96.7% (95.3–98.0)** | 6.8% | 8.6% | **98.8%** |
+| EfficientNetB0 (previous champion) | 91.9% (89.7–93.8) | 11.4% | 16.9% | 96.4% |
+
+Reducing reliance on source cues paid off where it matters: on new data the champion is
+clearly more accurate, and refuses or defers less. Caveats: three classes only, 614
+images, and the remaining images may still share origins with other public collections.
 
 More: [results](docs/results.md) (all tables and figures, generated from MLflow),
 [data audit](docs/data_audit.md), [model card](docs/model_card.md),
@@ -211,9 +233,9 @@ uploads, path-traversal file names, security headers).
 
 ## Limitations
 
-- **Image-level evaluation on one public dataset.** The dataset has no patient IDs, so
-  different slices of one patient can sit in different splits. Performance on other
-  scanners or hospitals is unknown.
+- **Image-level evaluation; limited external validation.** The dataset has no patient
+  IDs, so different slices of one patient can sit in different splits. The external test
+  covers 614 images and three classes from one other source.
 - **Source shortcuts.** Image source partly reveals the class (a metadata-only probe
   reaches 79%). Head cropping and intensity normalization reduced the champion's reliance
   on it, but cues such as MRI sequence type and the blur of upscaled small images remain:

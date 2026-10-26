@@ -108,6 +108,20 @@ between those two classes, which are also the model's most frequent confusion.
 files). The file is committed; its hash `0816b6f44c96` is stored in every training run,
 and a test pins these counts.
 
+## Finding 5: an "external" dataset that mostly isn't
+
+PMRAM, published as brain MRIs from hospitals in Bangladesh, was used as an external test
+set. The same duplicate detector, run on PMRAM and the training dataset together, linked
+**891 of its 1,505 original images (59%)** to images in the training dataset: all 373
+pituitary images, 285 of 396 "no tumor", 209 of 373 glioma and 24 of 363 meningioma.
+The links are genuine: 99.8% of linked pairs carry the same label (chance would be about
+25%), the median perceptual-hash distance is 2 and the median correlation 0.99, and the
+pairs are visibly the same scans, sometimes with altered contrast.
+
+**Handling:** those images were excluded; the 614 remaining images form the external test
+set (`make external-eval`, [design.md](design.md#19-external-validation)). The lesson
+generalizes: a dataset's stated origin is not evidence that its images are new.
+
 ## What this audit cannot fix
 
 - **Patient leakage.** Without patient IDs, two different slices of the same patient that
@@ -115,3 +129,6 @@ and a test pins these counts.
   patient-level.
 - **One source per class.** The source shortcut can be measured and reduced, but not
   removed without data from other sources.
+- **Unknown provenance of "new" images.** Images can only be checked against datasets
+  available locally; the 614 external images may still come from other public
+  collections.

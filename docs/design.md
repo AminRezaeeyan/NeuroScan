@@ -29,6 +29,7 @@ Contents
 16. [What is deliberately not done](#16-what-is-deliberately-not-done)
 17. [Open problems and next steps](#17-open-problems-and-next-steps)
 18. [Reducing the source shortcut](#18-reducing-the-source-shortcut)
+19. [External validation](#19-external-validation)
 
 ---
 
@@ -762,8 +763,8 @@ checks locally.
   images) cannot be removed by preprocessing; data from more sources per class would be
   needed. ResNet50 with shortcut-reduced preprocessing is an untested combination.
 - **Train longer.** The pretrained models hit their epoch limit while improving.
-- **External validation.** Test on brain MRIs from another source to measure how the
-  model and the OOD detector behave under a real distribution shift.
+- **More external validation.** The external test (section 19) covers one source and
+  three classes; a dataset with pituitary tumors and verified provenance would complete it.
 - **Label noise.** 27 duplicate groups carry conflicting labels; a review of these would
   improve both training and the test set.
 
@@ -845,3 +846,52 @@ The demo's "hard case" had to change: the new model answers the previous one (a 
 the first champion was unsure about) correctly at 94% confidence. The new hard case is a
 meningioma the current model is split on (51% glioma), the confusion that remains its
 main weakness.
+
+---
+
+## 19. External validation
+
+### 19.1 Choosing a dataset, and checking it
+
+**Decision.** PMRAM (Kaggle `orvile/pmram-bangladeshi-brain-cancer-mri-dataset`,
+CC BY-SA 4.0): brain MRIs collected at hospitals in Bangladesh with the same four classes.
+Only its original images are used (1,505 on Kaggle); its augmented copies would count the
+same scan several times. `make external-data` downloads it.
+
+Public MRI collections often borrow from each other, so before evaluating, the training
+split's duplicate detector (section 3.4) was run on PMRAM and the whole training dataset
+together. **It linked 891 of the 1,505 images (59%) to training-dataset images**, including
+all 373 pituitary images. The links were verified: 99.8% of linked pairs share their
+label, the median pHash distance is 2 and the median correlation 0.99, and example pairs
+are visibly the same scans. Those images are excluded, leaving 614 (164 glioma,
+339 meningioma, 111 no tumor). Without this check, most of the "external" test would
+have re-tested images the models had already seen.
+
+### 19.2 Results
+
+`make external-eval` runs each packaged model (preprocessing, calibration, OOD detector,
+uncertainty rule) on the 614 images:
+
+| Model | Accuracy, forced (95% CI) | Macro F1 (3 classes) | Recall: glioma / meningioma / no tumor | Refused (OOD) | Uncertain | Answered | Accuracy when answered |
+| --- | --- | ---: | --- | ---: | ---: | ---: | ---: |
+| v10, shortcut-reduced (champion) | 96.7% (95.3–98.0) | 0.982 | 98.8% / 95.0% / 99.1% | 6.8% | 8.6% | 84.5% | 98.8% |
+| v7, standard (previous champion) | 91.9% (89.7–93.8) | 0.955 | 92.7% / 89.4% / 98.2% | 11.4% | 16.9% | 71.7% | 96.4% |
+
+### 19.3 What it shows
+
+- **The shortcut reduction improved generalization.** The two models differ only in
+  preprocessing; on new data the shortcut-reduced one is more accurate with
+  non-overlapping intervals, and needs to refuse or defer less (15% versus 28%). The
+  selection rule had chosen it before this test existed; the external data confirms the
+  choice for a reason the rule could not see.
+- **The refusal rules respond to the shift.** Both models refuse and defer more than on
+  the internal test split (champion: 6.8% and 8.6% versus 2.0% and 3.6%), and the answered
+  predictions stay highly accurate.
+- **Feared failure that did not happen.** "No tumor" scans here are 512x512 like the
+  tumor scans, unlike in the training data; a model relying on image size would have
+  called them tumors. Both models recognize them (98–99% recall).
+
+**Limits.** 614 images from one source, three classes (no pituitary), and the remaining
+images may still originate from public collections not available locally. The macro F1
+is computed over the three classes present; averaging in the absent class would count it
+as zero.

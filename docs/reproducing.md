@@ -92,6 +92,8 @@ make explain             # Grad-CAM grid and brain-mask check (test split)
 make ood-data            # public OOD test images into data/ood/ (~920 MB download)
 make ood                 # fit the detector, evaluate, package, move @champion
 make figures             # docs/results.md and docs/figures/ from MLflow
+make external-data       # PMRAM external test set into data/external/ (~168 MB)
+make external-eval       # overlap check against training data, then evaluate
 ```
 
 `make calibrate` and `make ood` each register a new model version and move the

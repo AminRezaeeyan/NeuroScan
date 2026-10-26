@@ -70,6 +70,19 @@ Meningioma is the weakest class; most errors are glioma/meningioma confusions.
 | Flagged uncertain (calibrated confidence < 0.75) | 3.6% |
 | Accuracy on the answered rest | 98.2% |
 
+### External test (other hospitals)
+
+On 614 images from PMRAM (hospitals in Bangladesh) that do not duplicate training data
+(glioma, meningioma and no tumor only; every PMRAM pituitary image was a duplicate):
+
+| | Champion | Previous champion |
+| --- | ---: | ---: |
+| Accuracy, forced to answer (95% CI) | 96.7% (95.3–98.0) | 91.9% (89.7–93.8) |
+| Recall: glioma / meningioma / no tumor | 98.8% / 95.0% / 99.1% | 92.7% / 89.4% / 98.2% |
+| Refused as out of distribution | 6.8% | 11.4% |
+| Flagged uncertain | 8.6% | 16.9% |
+| Accuracy when answered | 98.8% | 96.4% |
+
 ### Calibration
 
 Temperature T = 2.19, fitted on validation. Expected calibration error on test: 0.023
@@ -101,8 +114,9 @@ but did not remove, the reliance on image-source cues.
 
 ## Limitations and failure modes
 
-- **Image-level, single-dataset evaluation.** No patient IDs; one public collection.
-  Performance on other scanners, protocols or hospitals is unknown.
+- **Image-level evaluation, limited external validation.** No patient IDs; the external
+  test covers one other source, three classes and 614 images. On it, more scans are
+  refused (6.8%) and deferred (8.6%) than on the internal test split.
 - **Source shortcut.** Reduced but not removed; MRI sequence type and upscaling blur still
   differ by source. Tumor-versus-no-tumor results in particular are likely optimistic.
 - **OOD means "unlike the training data".** Genuine brain MRIs framed differently (for
