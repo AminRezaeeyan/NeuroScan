@@ -300,16 +300,22 @@ tags (`git_commit`, `split_version`, `trained_on`, ...) and the model registered
 version of `neuroscan-classifier`. Importing the same bundle twice is refused unless
 `--force` replaces the earlier import.
 
-### 5.3 Getting exact code into Colab without publishing it
+### 5.3 Getting exact code into Colab
 
-**Context.** The work happens on a branch that is not pushed while in progress, so Colab
-cannot `git clone` it.
+**Decision.** The Colab notebook clones the repository at a chosen branch, tag or commit
+(`REF`) and installs it; a fresh clone is clean, so every run bundle records the exact
+commit it was trained from. One session trains a list of configs in sequence; a config
+whose bundle already exists is skipped, and an interrupted one resumes.
 
-**Decision.** `make colab-package` archives the current commit with `git archive` and
-stamps the commit hash into the archive. It refuses to run with uncommitted changes to
-packaged files, so every run points to an exact commit. The archive is uploaded to Drive
-and installed in Colab. Inside Colab, the code reads its commit from the stamp, since
-there is no `.git` folder.
+**History.** While the rework lived on an unpushed branch, Colab could not clone it, so a
+`make colab-package` target archived the current commit with `git archive`, stamped the
+commit hash into the archive and refused to run with uncommitted changes; the archive was
+uploaded to Drive by hand. All five models in this repository were trained that way.
+Cloning replaced it once the branch was published: fewer manual steps, and the recorded
+commit comes from git itself rather than a stamp.
+
+**Remaining manual step.** Bundles are copied from Drive to the tracking machine by hand;
+`make import-all` then imports every new one and skips those already in MLflow.
 
 ### 5.4 Surviving Colab disconnects
 

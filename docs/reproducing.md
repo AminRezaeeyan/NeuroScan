@@ -40,20 +40,19 @@ The experiment is `neuroscan`; the registered model is `neuroscan-classifier`.
 Colab never talks to MLflow. Each session writes a **run bundle** to Google Drive, which
 is imported locally.
 
-1. Commit your changes, then package the exact commit:
-   ```bash
-   make colab-package          # -> dist/neuroscan-<commit>.tar.gz
-   ```
-2. In Google Drive, create `My Drive/neuroscan/code/` and upload the archive there.
-3. Open `notebooks/colab_train.ipynb` in Colab (File → Upload notebook).
-4. Add a Colab secret (key icon in the sidebar) named `KAGGLE_API_TOKEN` and enable
+1. Push the code you want to train (Colab clones it from GitHub).
+2. Open `notebooks/colab_train.ipynb` in Colab (File → Open notebook → GitHub, or upload
+   it).
+3. Add a Colab secret (key icon in the sidebar) named `KAGGLE_API_TOKEN` and enable
    notebook access.
-5. Runtime → Change runtime type → T4 GPU.
-6. In the first cell set `PACKAGE` to the archive name, `CONFIG` to one of
-   `configs/baseline_cnn.yaml`, `configs/cnn_gap.yaml`, `configs/efficientnet_b0.yaml`,
-   `configs/resnet50.yaml`, and `DRY_RUN = False`.
-7. Runtime → Run all. If the session disconnects, run all again with the same settings:
-   training resumes from the last finished epoch.
+4. Runtime → Change runtime type → T4 GPU.
+5. In the first cell set `REF` (branch, tag or commit; default `main`) and list the configs
+   to train in `CONFIGS`, for example all of `configs/baseline_cnn.yaml`,
+   `configs/cnn_gap.yaml`, `configs/efficientnet_b0.yaml`, `configs/resnet50.yaml` and
+   `configs/efficientnet_b0_shortcut_reduced.yaml`.
+6. Runtime → Run all. Configs train one after another. If the session disconnects, run
+   all again with the same settings: finished configs are skipped and the interrupted one
+   resumes from its last finished epoch.
 
 Set `DRY_RUN = True` first to push one epoch on 32 images through the whole pipeline.
 
@@ -66,12 +65,14 @@ uv run python -m neuroscan.train --finalize runs/<run-name>
 
 ## 4. Import and evaluate
 
-Download `My Drive/neuroscan/runs/<run-name>/` into `runs/`, then:
+Download the new folders from `My Drive/neuroscan/runs/` into `runs/`, then:
 
 ```bash
-make import BUNDLE=runs/baseline-cnn     # prints the MLflow run ID and model version
+make import-all                          # imports every new bundle, prints run IDs
 make eval RUN=<run-id> SETS="val test"   # metrics, intervals, shortcut check, figures
 ```
+
+`make import BUNDLE=runs/<run-name>` imports a single bundle.
 
 Repeat for the four models.
 
