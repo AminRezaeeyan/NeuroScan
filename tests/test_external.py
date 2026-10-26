@@ -56,3 +56,22 @@ def test_find_overlap(tmp_path):
         "glioma/copy.png": True,
         "glioma/new.png": False,
     }
+
+
+def test_summary_ignores_absent_classes():
+    import pandas as pd
+
+    from neuroscan.evaluate_external import summarize
+
+    preds = pd.DataFrame(
+        {
+            "label_idx": [0, 0, 1, 2],  # no pituitary images
+            "prediction": ["glioma", "glioma", "meningioma", "notumor"],
+            "status": ["ok", "ok", "uncertain", "rejected_ood"],
+        }
+    )
+    m = summarize(preds)
+    assert m["forced.macro_f1_present"] == 1.0
+    assert m["forced.macro_f1"] < 1.0  # the 4-class average counts pituitary as 0
+    assert m["answered.share"] == 0.5 and m["answered.accuracy"] == 1.0
+    assert m["status.rejected_ood"] == 0.25

@@ -19,6 +19,7 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+from sklearn.metrics import f1_score
 
 from neuroscan.config import CLASS_NAMES
 from neuroscan.data.external import find_overlap, scan
@@ -49,6 +50,13 @@ def summarize(preds: pd.DataFrame) -> dict[str, float]:
     forced = point_metrics(y_true, y_pred)
     m.update({f"forced.{k}": v for k, v in forced.items()})
     m.update({f"forced.{k}": v for k, v in bootstrap_ci(y_true, y_pred).items()})
+    # Macro F1 over the classes present: a class with no images (all its images
+    # duplicated training data) would otherwise count as F1 = 0.
+    present = sorted(set(y_true.tolist()))
+    m["forced.macro_f1_present"] = float(
+        f1_score(y_true, y_pred, labels=present, average="macro", zero_division=0)
+    )
+    m["n_classes_present"] = float(len(present))
     for status in STATUSES:
         m[f"status.{status}"] = float((preds["status"] == status).mean())
     ok = (preds["status"] == "ok").to_numpy()
@@ -60,16 +68,20 @@ def summarize(preds: pd.DataFrame) -> dict[str, float]:
 
 def table(results: dict[str, dict[str, float]]) -> str:
     lines = [
-        "| Model | Images | Accuracy, forced (95% CI) | Macro F1, forced | Tumor sensitivity "
+        "| Model | Images | Accuracy, forced (95% CI) | Macro F1 (classes present) "
+        "| Recall: glioma / meningioma / no tumor | Tumor sensitivity "
         "| Refused (OOD) | Uncertain | Answered | Accuracy when answered |",
-        "| --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: |",
+        "| --- | ---: | --- | ---: | --- | ---: | ---: | ---: | ---: | ---: |",
     ]
     for name, m in results.items():
+        recalls = " / ".join(
+            f"{m[f'forced.{c}.recall']:.1%}" for c in ("glioma", "meningioma", "notumor")
+        )
         lines.append(
             f"| {name} | {int(m['n_images'])} "
             f"| {m['forced.accuracy']:.1%} ({m['forced.accuracy_ci_low']:.1%}–"
-            f"{m['forced.accuracy_ci_high']:.1%}) | {m['forced.macro_f1']:.3f} "
-            f"| {m['forced.tumor_sensitivity']:.1%} | {m['status.rejected_ood']:.1%} "
+            f"{m['forced.accuracy_ci_high']:.1%}) | {m['forced.macro_f1_present']:.3f} "
+            f"| {recalls} | {m['forced.tumor_sensitivity']:.1%} | {m['status.rejected_ood']:.1%} "
             f"| {m['status.uncertain']:.1%} | {m['answered.share']:.1%} "
             f"| {m.get('answered.accuracy', float('nan')):.1%} |"
         )
@@ -101,7 +113,7 @@ def main() -> None:
         f"PMRAM: {len(df)} images; {int(overlap.sum())} duplicate training-dataset images "
         f"and are excluded; {len(clean)} evaluated"
     )
-    print(clean["label"].value_counts().reindex(CLASS_NAMES).to_dict())
+    print(clean["label"].value_counts().reindex(CLASS_NAMES, fill_value=0).to_dict())
 
     results: dict[str, dict[str, float]] = {}
     for uri in args.models:
