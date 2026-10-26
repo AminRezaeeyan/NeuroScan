@@ -1,6 +1,6 @@
 [project]
 name = "neuroscan"
-version = "2.0.0.dev0"
+version = "2.0.0"
 description = "Brain tumor MRI classification with tracked experiments, calibration and OOD rejection"
 readme = "README.md"
 license = { file = "LICENSE" }
