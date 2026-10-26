@@ -1,0 +1,26 @@
+# Two stages: train the new head on a frozen backbone for head_epochs, then unfreeze
+# the top blocks and continue at learning_rate * fine_tune_lr_scale.
+run_name: resnet50
+model:
+  name: resnet50
+  weights: imagenet
+  dropout: 0.3
+  fine_tune_from: conv5     # stage 2 trains the last stage and head (~15M of 23.6M params)
+data:
+  image_size: 224
+  batch_size: 32
+  seed: 42
+augment:
+  flip: true
+  rotation: 0.1
+  zoom: 0.1
+  brightness: 0.15
+train:
+  epochs: 40                   # both stages together
+  head_epochs: 10              # stage 1, no early stopping
+  learning_rate: 0.001         # stage 1
+  fine_tune_lr_scale: 0.1      # stage 2 starts at 0.0001
+  early_stopping_patience: 8   # stage 2, best weights restored
+  lr_patience: 4
+  lr_factor: 0.5
+  min_lr: 0.000001
