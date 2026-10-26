@@ -5,7 +5,7 @@ description = "Brain tumor MRI classification with tracked experiments, calibrat
 readme = "README.md"
 license = { file = "LICENSE" }
 authors = [{ name = "Amin Rezaeeyan" }]
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 dependencies = [
     # Range instead of a pin so Colab can keep its preinstalled TensorFlow.
     "tensorflow>=2.18,<2.21",
@@ -54,7 +54,7 @@ packages = ["src/neuroscan"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py310"
+target-version = "py312"
 extend-exclude = ["notebooks", "*.md"]
 
 [tool.ruff.lint]
