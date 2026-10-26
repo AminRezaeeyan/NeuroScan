@@ -165,9 +165,20 @@ def main() -> None:
     parser.add_argument("bundles", type=Path, nargs="+", help="run bundle folder(s)")
     parser.add_argument("--no-register", action="store_true", help="don't register the model")
     parser.add_argument("--force", action="store_true", help="replace an earlier import")
+    parser.add_argument(
+        "--skip-existing",
+        action="store_true",
+        help="skip bundles already imported and folders that aren't finished bundles",
+    )
     args = parser.parse_args()
     for run_dir in args.bundles:
-        result = import_bundle(run_dir, register=not args.no_register, force=args.force)
+        try:
+            result = import_bundle(run_dir, register=not args.no_register, force=args.force)
+        except (FileExistsError, ValueError, FileNotFoundError) as exc:
+            if not args.skip_existing:
+                raise
+            print(f"{run_dir.name}: skipped ({exc})")
+            continue
         version = f", model version {result.model_version}" if result.model_version else ""
         print(f"{run_dir.name}: run {result.run_id}{version}")
 

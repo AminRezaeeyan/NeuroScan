@@ -28,8 +28,6 @@ HISTORY_FILE = "history.json"
 MODEL_FILE = "model.keras"
 FIGURES_DIR = "figures"
 CHECKPOINT_DIR = "checkpoints"
-# Written into source archives made for Colab, where there is no .git folder.
-COMMIT_FILE = "GIT_COMMIT"
 
 
 def now_ms() -> int:
@@ -52,18 +50,13 @@ def _git(*args: str) -> str:
 
 
 def git_commit() -> str:
-    """Commit of the running code: from git if available, else from the archive's GIT_COMMIT."""
+    """Commit of the running code (``-dirty`` if tracked files changed), or "unknown"."""
     try:
         commit = _git("rev-parse", "HEAD")
         dirty = _git("status", "--porcelain", "--untracked-files=no")
         return f"{commit}-dirty" if dirty else commit
     except (OSError, subprocess.CalledProcessError):
-        pass
-    for parent in Path(__file__).resolve().parents:
-        marker = parent / COMMIT_FILE
-        if marker.is_file():
-            return marker.read_text().strip()
-    return "unknown"
+        return "unknown"
 
 
 def gpu_name() -> str:

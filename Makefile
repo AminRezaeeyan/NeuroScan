@@ -1,4 +1,4 @@
-.PHONY: install lint typecheck test mlflow data dedup split import eval select calibrate explain ood-data ood figures serve docker-build docker-up docker-down security test-behavioral ci optimize loadtest shortcut external-data external-eval colab-package
+.PHONY: install lint typecheck test mlflow data dedup split import eval select calibrate explain ood-data ood figures serve docker-build docker-up docker-down security test-behavioral ci optimize loadtest shortcut external-data external-eval import-all
 
 install:
 	uv sync --all-extras
@@ -35,6 +35,10 @@ dedup:
 # Fixed, duplicate-aware train/val/test split (versioned in git)
 split:
 	uv run python -m neuroscan.data.splits --out splits/v1.csv
+
+# Import every bundle in runs/ that isn't in MLflow yet (Colab writes them to Drive)
+import-all:
+	uv run python -m neuroscan.tracking.import_run --skip-existing runs/*/
 
 # Import run bundle(s) into the local MLflow store: make import BUNDLE=runs/baseline-cnn
 import:
@@ -110,15 +114,3 @@ security:
 # Export README figures and docs/results.md from MLflow
 figures:
 	uv run python -m neuroscan.reports.figures
-
-# Source archive of the current commit for Colab (upload it to Drive: MyDrive/neuroscan/code/)
-COMMIT := $(shell git rev-parse HEAD)
-PACKAGED := src configs $(wildcard splits) pyproject.toml uv.lock README.md LICENSE
-colab-package:
-	@test -z "$$(git status --porcelain --untracked-files=no -- $(PACKAGED))" || \
-		(echo "Commit your changes first: runs must point to an exact commit."; exit 1)
-	mkdir -p dist
-	git archive --format=tar.gz --prefix=neuroscan/ \
-		--add-virtual-file=neuroscan/GIT_COMMIT:$(COMMIT) \
-		-o dist/neuroscan-$(shell git rev-parse --short HEAD).tar.gz HEAD -- $(PACKAGED)
-	@echo "Created dist/neuroscan-$(shell git rev-parse --short HEAD).tar.gz"

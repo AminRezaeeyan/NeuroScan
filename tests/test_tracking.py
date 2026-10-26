@@ -78,3 +78,21 @@ def test_unfinished_bundle_is_rejected(run_dir, store):
     (run_dir / "model.keras").unlink()
     with pytest.raises(ValueError, match="not a finished run"):
         import_bundle(run_dir, **store)
+
+
+def test_cli_skip_existing(run_dir, store, tmp_path, monkeypatch, capsys):
+    import sys
+
+    from neuroscan.tracking import import_run
+
+    monkeypatch.setenv("MLFLOW_TRACKING_URI", store["tracking_uri"])
+    monkeypatch.setenv("NEUROSCAN_ARTIFACT_ROOT", str(store["artifact_root"]))
+    not_a_bundle = tmp_path / "notes"
+    not_a_bundle.mkdir()
+    argv = ["import_run", "--skip-existing", "--no-register", str(run_dir), str(not_a_bundle)]
+    monkeypatch.setattr(sys, "argv", argv)
+    import_run.main()
+    import_run.main()  # second time: the bundle is already imported
+    out = capsys.readouterr().out
+    assert out.count("tiny: run ") == 1
+    assert "tiny: skipped" in out and "notes: skipped" in out
